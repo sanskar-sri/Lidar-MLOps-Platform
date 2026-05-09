@@ -1,0 +1,355 @@
+{
+    "dataset_id": "paris-lille-id-1",
+    "dataset_name": "paris-lille-dataset",
+    "upload_mode": "multiple_tiles",
+    "description": "",
+    "created_at": "2026-05-08T18:32:42.117544",
+    "status": "registered",
+    "storage": {
+        "bucket": "Building-Identification-MLS",
+        "raw_tile_prefix": "bronze_raw_data/paris-lille-id-1/source_files/tiles/",
+        "label_map_prefix": "bronze_raw_data/paris-lille-id-1/source_files/label_maps/",
+        "manifest_prefix": "bronze_raw_data/paris-lille-id-1/manifests/",
+        "metadata_path": "metadata/datasets/paris-lille-id-1.json",
+        "analytics_path": "metadata_analytics/paris-lille-id-1/"
+    },
+    "total_files": 4,
+    "total_points": 119783382,
+    "labels": "Available",
+    "label_maps": [
+        {
+            "file_name": "coarse_classes.xml",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/label_maps/coarse_classes.xml",
+            "local_temp_path": "/Users/sanskarsrivastava/Desktop/Datasets/paris-lille-10-classes/coarse_classes.xml",
+            "b2_size_bytes": 15953,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f1186fc9a3a003c89_d20260508_m130231_c005_v0501043_t0008_u01778245351590"
+        }
+    ],
+    "quality_flags": {
+        "missing_xyz": false,
+        "missing_label": false,
+        "missing_tile_label_column": false,
+        "missing_label_map": false,
+        "missing_intensity": false,
+        "missing_reflectance": false,
+        "missing_rgb": true,
+        "missing_origin": true,
+        "label_mapping_available": true,
+        "building_mapping_available": true,
+        "class_imbalance_high": true,
+        "large_file_warning": true,
+        "ready_for_training": true,
+        "ready_for_inference": true
+    },
+    "file_summaries": [
+        {
+            "filename": "Lille1_1.ply",
+            "file_format": "PLY",
+            "point_count": 30033430,
+            "x_min": -360.1784973144531,
+            "x_max": 67.18555450439453,
+            "y_min": -412.1393737792969,
+            "y_max": 101.89352416992188,
+            "z_min": 32.78496170043945,
+            "z_max": 66.74453735351562,
+            "attributes": [
+                "x",
+                "y",
+                "z",
+                "reflectance",
+                "class"
+            ],
+            "has_xyz": true,
+            "has_label": true,
+            "label_column": "class",
+            "has_semantic_label": true,
+            "semantic_label_column": "class",
+            "has_intensity": true,
+            "has_reflectance": true,
+            "has_rgb": false,
+            "has_origin": false,
+            "reflectance_column": "reflectance",
+            "intensity_column": "reflectance",
+            "xorigin_column": "",
+            "yorigin_column": "",
+            "zorigin_column": "",
+            "red_column": "",
+            "green_column": "",
+            "blue_column": "",
+            "label_unique_count": 10,
+            "label_min": "0",
+            "label_max": "9",
+            "label_histogram": {
+                "0": 199627,
+                "1": 17462868,
+                "2": 7422179,
+                "3": 167122,
+                "4": 7735,
+                "5": 67074,
+                "6": 1210528,
+                "7": 16290,
+                "8": 1291186,
+                "9": 2188821
+            },
+            "intensity_min": 0.0,
+            "intensity_max": 255.0,
+            "reflectance_min": 0.0,
+            "reflectance_max": 255.0,
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille1_1.ply",
+            "b2_size_bytes": 510568487,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f20075c319d7a7ba0_d20260508_m125631_c005_v0501013_t0019_u01778244991406"
+        },
+        {
+            "filename": "Lille1_2.ply",
+            "file_format": "PLY",
+            "point_count": 30014988,
+            "x_min": -776.23046875,
+            "x_max": -334.54437255859375,
+            "y_min": -751.7919921875,
+            "y_max": -384.90057373046875,
+            "z_min": 27.075782775878906,
+            "z_max": 54.31221008300781,
+            "attributes": [
+                "x",
+                "y",
+                "z",
+                "reflectance",
+                "class"
+            ],
+            "has_xyz": true,
+            "has_label": true,
+            "label_column": "class",
+            "has_semantic_label": true,
+            "semantic_label_column": "class",
+            "has_intensity": true,
+            "has_reflectance": true,
+            "has_rgb": false,
+            "has_origin": false,
+            "reflectance_column": "reflectance",
+            "intensity_column": "reflectance",
+            "xorigin_column": "",
+            "yorigin_column": "",
+            "zorigin_column": "",
+            "red_column": "",
+            "green_column": "",
+            "blue_column": "",
+            "label_unique_count": 10,
+            "label_min": "0",
+            "label_max": "9",
+            "label_histogram": {
+                "0": 270626,
+                "1": 17463872,
+                "2": 9450594,
+                "3": 185901,
+                "4": 22355,
+                "5": 85451,
+                "6": 397685,
+                "7": 7328,
+                "8": 852111,
+                "9": 1279065
+            },
+            "intensity_min": 0.0,
+            "intensity_max": 255.0,
+            "reflectance_min": 0.0,
+            "reflectance_max": 255.0,
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille1_2.ply",
+            "b2_size_bytes": 510254973,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f2009497700d2bc27_d20260508_m125810_c005_v0501020_t0040_u01778245090302"
+        },
+        {
+            "filename": "Lille2.ply",
+            "file_format": "PLY",
+            "point_count": 21402421,
+            "x_min": -944.48486328125,
+            "x_max": -768.9822387695312,
+            "y_min": -1053.599365234375,
+            "y_max": -744.0069580078125,
+            "z_min": 16.29810905456543,
+            "z_max": 41.72740173339844,
+            "attributes": [
+                "x",
+                "y",
+                "z",
+                "reflectance",
+                "class"
+            ],
+            "has_xyz": true,
+            "has_label": true,
+            "label_column": "class",
+            "has_semantic_label": true,
+            "semantic_label_column": "class",
+            "has_intensity": true,
+            "has_reflectance": true,
+            "has_rgb": false,
+            "has_origin": false,
+            "reflectance_column": "reflectance",
+            "intensity_column": "reflectance",
+            "xorigin_column": "",
+            "yorigin_column": "",
+            "zorigin_column": "",
+            "red_column": "",
+            "green_column": "",
+            "blue_column": "",
+            "label_unique_count": 10,
+            "label_min": "0",
+            "label_max": "9",
+            "label_histogram": {
+                "0": 179841,
+                "1": 12042099,
+                "2": 7193259,
+                "3": 109906,
+                "4": 7298,
+                "5": 115885,
+                "6": 54818,
+                "7": 11233,
+                "8": 770451,
+                "9": 917631
+            },
+            "intensity_min": 0.0,
+            "intensity_max": 255.0,
+            "reflectance_min": 0.0,
+            "reflectance_max": 255.0,
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille2.ply",
+            "b2_size_bytes": 363841334,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f20020addcd254e28_d20260508_m125940_c005_v0501010_t0039_u01778245180305"
+        },
+        {
+            "filename": "Paris.ply",
+            "file_format": "PLY",
+            "point_count": 38332543,
+            "x_min": 9.483119010925293,
+            "x_max": 70.65985870361328,
+            "y_min": -764.216552734375,
+            "y_max": -313.9317321777344,
+            "z_min": 33.39712142944336,
+            "z_max": 65.29381561279297,
+            "attributes": [
+                "x",
+                "y",
+                "z",
+                "reflectance",
+                "class"
+            ],
+            "has_xyz": true,
+            "has_label": true,
+            "label_column": "class",
+            "has_semantic_label": true,
+            "semantic_label_column": "class",
+            "has_intensity": true,
+            "has_reflectance": true,
+            "has_rgb": false,
+            "has_origin": false,
+            "reflectance_column": "reflectance",
+            "intensity_column": "reflectance",
+            "xorigin_column": "",
+            "yorigin_column": "",
+            "zorigin_column": "",
+            "red_column": "",
+            "green_column": "",
+            "blue_column": "",
+            "label_unique_count": 10,
+            "label_min": "0",
+            "label_max": "9",
+            "label_histogram": {
+                "0": 992204,
+                "1": 18106481,
+                "2": 8948787,
+                "3": 193167,
+                "4": 24327,
+                "5": 28113,
+                "6": 2389916,
+                "7": 137281,
+                "8": 1298547,
+                "9": 6213720
+            },
+            "intensity_min": 0.0,
+            "intensity_max": 255.0,
+            "reflectance_min": 0.0,
+            "reflectance_max": 255.0,
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Paris.ply",
+            "b2_size_bytes": 651653408,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f200845298d2dccb0_d20260508_m130117_c005_v0501043_t0042_u01778245277596"
+        }
+    ],
+    "readiness_checks": [
+        {
+            "check": "XYZ present",
+            "status": "Pass",
+            "message": "XYZ coordinates are available."
+        },
+        {
+            "check": "Point count readable",
+            "status": "Pass",
+            "message": "Total points detected: 119,783,382"
+        },
+        {
+            "check": "File format supported",
+            "status": "Pass",
+            "message": "The uploaded point cloud format was readable."
+        },
+        {
+            "check": "Spatial bounds valid",
+            "status": "Pass",
+            "message": "XYZ bounding boxes were extracted from the uploaded tiles."
+        },
+        {
+            "check": "Reflectance / intensity available",
+            "status": "Pass",
+            "message": "Reflectance or intensity field is available."
+        },
+        {
+            "check": "Scanner origin fields available",
+            "status": "Warning",
+            "message": "Scanner origin fields were not detected."
+        },
+        {
+            "check": "RGB available",
+            "status": "Warning",
+            "message": "RGB color fields were not detected."
+        },
+        {
+            "check": "Semantic label column present",
+            "status": "Pass",
+            "message": "Semantic label column was detected in the point cloud tile."
+        },
+        {
+            "check": "Label mapping file available",
+            "status": "Pass",
+            "message": "Label mapping file was found and parsed."
+        },
+        {
+            "check": "Building class mapping present",
+            "status": "Pass",
+            "message": "Building class mapping is available."
+        },
+        {
+            "check": "Ready for supervised training preprocessing",
+            "status": "Pass",
+            "message": "Dataset is ready for supervised training preprocessing."
+        }
+    ],
+    "model_compatibility": [
+        {
+            "model": "PointNet++",
+            "required_format": "traditional/blocks/",
+            "status": "Not generated"
+        },
+        {
+            "model": "PointNet++ MSG",
+            "required_format": "traditional/blocks/",
+            "status": "Not generated"
+        },
+        {
+            "model": "RandLA-Net",
+            "required_format": "traditional/blocks/",
+            "status": "Not generated"
+        },
+        {
+            "model": "PTv3",
+            "required_format": "ptv3_pointcept/",
+            "status": "Not generated"
+        }
+    ],
+    "metadata_cloud_upload_status": "uploaded",
+    "metadata_cloud_upload_error": ""
+}

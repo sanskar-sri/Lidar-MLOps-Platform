@@ -1,0 +1,12 @@
+{
+    "dataset_id": "torronto-id-3",
+    "status": "failed",
+    "stage": "failed",
+    "total_files": 5,
+    "uploaded_files": 3,
+    "failed_files": 1,
+    "current_file": "L004.ply",
+    "percentage": 60.0,
+    "message": "[Errno 60] Operation timed out",
+    "updated_at": "2026-05-08T19:16:00.153263"
+}

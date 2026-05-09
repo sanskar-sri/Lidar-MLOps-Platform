@@ -1,0 +1,56 @@
+{
+    "dataset_id": "torronto-id-4",
+    "dataset_name": "torronto-id-4",
+    "uploaded_at": "2026-05-08T20:08:54.372772",
+    "bucket": "Building-Identification-MLS",
+    "raw_tile_prefix": "bronze_raw_data/torronto-id-4/source_files/tiles/",
+    "label_map_prefix": "bronze_raw_data/torronto-id-4/source_files/label_maps/",
+    "manifest_prefix": "bronze_raw_data/torronto-id-4/manifests/",
+    "files": [
+        {
+            "file_name": "L001.ply",
+            "b2_path": "bronze_raw_data/torronto-id-4/source_files/tiles/L001.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 927388830,
+            "uploaded_at": "2026-05-08T19:51:25.766857",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "L002.ply",
+            "b2_path": "bronze_raw_data/torronto-id-4/source_files/tiles/L002.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 442203833,
+            "uploaded_at": "2026-05-08T19:52:17.534608",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "L003.ply",
+            "b2_path": "bronze_raw_data/torronto-id-4/source_files/tiles/L003.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 1708028803,
+            "uploaded_at": "2026-05-08T20:07:52.302070",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "L004.ply",
+            "b2_path": "bronze_raw_data/torronto-id-4/source_files/tiles/L004.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 290149296,
+            "uploaded_at": "2026-05-08T20:08:45.054896",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "torronot_coarse_updated.xml",
+            "b2_path": "bronze_raw_data/torronto-id-4/source_files/label_maps/torronot_coarse_updated.xml",
+            "file_role": "label_mapping",
+            "format": "xml",
+            "file_size_bytes": 1739,
+            "uploaded_at": "2026-05-08T20:08:54.372022",
+            "verified_in_b2": true
+        }
+    ]
+}

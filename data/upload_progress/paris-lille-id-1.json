@@ -1,0 +1,12 @@
+{
+    "dataset_id": "paris-lille-id-1",
+    "status": "completed",
+    "stage": "completed",
+    "total_files": 5,
+    "uploaded_files": 5,
+    "failed_files": 0,
+    "current_file": "coarse_classes.xml",
+    "percentage": 100,
+    "message": "Upload completed successfully",
+    "updated_at": "2026-05-08T18:32:49.386832"
+}

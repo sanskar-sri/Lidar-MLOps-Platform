@@ -1,0 +1,56 @@
+{
+    "dataset_id": "paris-lille-id-1",
+    "dataset_name": "paris-lille-id-1",
+    "uploaded_at": "2026-05-08T18:32:32.770649",
+    "bucket": "Building-Identification-MLS",
+    "raw_tile_prefix": "bronze_raw_data/paris-lille-id-1/source_files/tiles/",
+    "label_map_prefix": "bronze_raw_data/paris-lille-id-1/source_files/label_maps/",
+    "manifest_prefix": "bronze_raw_data/paris-lille-id-1/manifests/",
+    "files": [
+        {
+            "file_name": "Lille1_1.ply",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille1_1.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 510568487,
+            "uploaded_at": "2026-05-08T18:27:26.211924",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "Lille1_2.ply",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille1_2.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 510254973,
+            "uploaded_at": "2026-05-08T18:29:06.065228",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "Lille2.ply",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille2.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 363841334,
+            "uploaded_at": "2026-05-08T18:30:22.652198",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "Paris.ply",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Paris.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 651653408,
+            "uploaded_at": "2026-05-08T18:32:28.214011",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "coarse_classes.xml",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/label_maps/coarse_classes.xml",
+            "file_role": "label_mapping",
+            "format": "xml",
+            "file_size_bytes": 15953,
+            "uploaded_at": "2026-05-08T18:32:32.769629",
+            "verified_in_b2": true
+        }
+    ]
+}

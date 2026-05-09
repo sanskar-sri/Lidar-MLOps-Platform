@@ -1,0 +1,12 @@
+{
+    "dataset_id": "torronto-id-4",
+    "status": "completed",
+    "stage": "completed",
+    "total_files": 5,
+    "uploaded_files": 5,
+    "failed_files": 0,
+    "current_file": "torronot_coarse_updated.xml",
+    "percentage": 100,
+    "message": "Upload completed successfully",
+    "updated_at": "2026-05-08T20:09:58.464920"
+}

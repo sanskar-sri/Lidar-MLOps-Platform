@@ -1,0 +1,57 @@
+{
+    "dataset_id": "paris-lille-id-1",
+    "checksum_algorithm": "sha1",
+    "created_at": "2026-05-08T18:32:32.770741",
+    "files": [
+        {
+            "file_name": "Lille1_1.ply",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille1_1.ply",
+            "file_role": "point_cloud_tile",
+            "sha1": "d3cbe4d7d18c16c1d69256ffbde1e42c65459a6c",
+            "file_size_bytes": 510568487,
+            "verified_in_b2": true,
+            "verified_size_bytes": 510568487,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f20075c319d7a7ba0_d20260508_m125631_c005_v0501013_t0019_u01778244991406"
+        },
+        {
+            "file_name": "Lille1_2.ply",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille1_2.ply",
+            "file_role": "point_cloud_tile",
+            "sha1": "c07f40ce1d7cef4c24ee6e45e567f999e574fa91",
+            "file_size_bytes": 510254973,
+            "verified_in_b2": true,
+            "verified_size_bytes": 510254973,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f2009497700d2bc27_d20260508_m125810_c005_v0501020_t0040_u01778245090302"
+        },
+        {
+            "file_name": "Lille2.ply",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Lille2.ply",
+            "file_role": "point_cloud_tile",
+            "sha1": "cb625486e3a7f1ed1298a427a3749d658f4af2e9",
+            "file_size_bytes": 363841334,
+            "verified_in_b2": true,
+            "verified_size_bytes": 363841334,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f20020addcd254e28_d20260508_m125940_c005_v0501010_t0039_u01778245180305"
+        },
+        {
+            "file_name": "Paris.ply",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/tiles/Paris.ply",
+            "file_role": "point_cloud_tile",
+            "sha1": "e6ddd7fd04fe1012e4677cd02af28eeccdd7931c",
+            "file_size_bytes": 651653408,
+            "verified_in_b2": true,
+            "verified_size_bytes": 651653408,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f200845298d2dccb0_d20260508_m130117_c005_v0501043_t0042_u01778245277596"
+        },
+        {
+            "file_name": "coarse_classes.xml",
+            "b2_path": "bronze_raw_data/paris-lille-id-1/source_files/label_maps/coarse_classes.xml",
+            "file_role": "label_mapping",
+            "sha1": "51b8f053b82616093da31a95601e2efa94101169",
+            "file_size_bytes": 15953,
+            "verified_in_b2": true,
+            "verified_size_bytes": 15953,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f1186fc9a3a003c89_d20260508_m130231_c005_v0501043_t0008_u01778245351590"
+        }
+    ]
+}
