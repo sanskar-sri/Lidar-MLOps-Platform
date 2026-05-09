@@ -62,10 +62,6 @@ def upload_raw_data_panel():
                                                 "value": "single_tile",
                                             },
                                             {
-                                                "label": "Multiple Tiles",
-                                                "value": "multiple_tiles",
-                                            },
-                                            {
                                                 "label": "Folder Upload",
                                                 "value": "folder_upload",
                                             },
@@ -123,38 +119,6 @@ def upload_raw_data_panel():
                             ),
                         ],
                         className="helper-text",
-                    ),
-
-                    html.Hr(),
-
-                    html.H5("Small File Upload"),
-
-                    dbc.Alert(
-                        [
-                            html.Strong("Use only for small test files. "),
-                            "Do not use this browser upload for large 700 MB MLS/LiDAR tiles, because browser upload uses memory-heavy base64 transfer.",
-                        ],
-                        color="info",
-                    ),
-
-                    dcc.Upload(
-                        id="raw-file-upload",
-                        children=html.Div(
-                            [
-                                "Drag and drop small files here, or ",
-                                html.A("click to select files"),
-                            ]
-                        ),
-                        className="upload-box",
-                        multiple=True,
-                    ),
-
-                    html.Br(),
-
-                    dbc.Button(
-                        "Upload Selected Small Files to B2",
-                        id="upload-button",
-                        color="primary",
                     ),
 
                     html.Hr(),

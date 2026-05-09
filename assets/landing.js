@@ -9,7 +9,6 @@
  *      – Building geometry, corridor points, ground plane, and street scatter
  *      – Colored with the CloudCompare B→G→Y→R colormap by height
  *      – Slow Y-axis rotation at ~0.2 rpm via requestAnimationFrame
- *   2. Animated stat counters (50K, 6, 9, 6) with easeOutCubic
  */
 
 function initLandingPage() {
@@ -143,31 +142,6 @@ function initLandingPage() {
     }
 
     drawCloud();
-
-    // ── 2. Stat counters ──────────────────────────────────────────
-
-    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
-
-    function animateCounter(id, target, durationMs, formatFn) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const t0 = performance.now();
-        (function tick(now) {
-            const progress = Math.min((now - t0) / durationMs, 1);
-            el.textContent = formatFn(Math.round(easeOutCubic(progress) * target));
-            if (progress < 1) requestAnimationFrame(tick);
-        })(t0);
-    }
-
-    // Delay slightly so the page finishes painting first
-    setTimeout(function () {
-        animateCounter('lp-s-p', 50000, 1200, function (v) {
-            return v >= 50000 ? '50K' : Math.round(v / 1000) + 'K';
-        });
-        animateCounter('lp-s-m', 6, 900,  function (v) { return String(v); });
-        animateCounter('lp-s-v', 9, 900,  function (v) { return String(v); });
-        animateCounter('lp-s-s', 6, 900,  function (v) { return String(v); });
-    }, 350);
 
     return true;
 }
