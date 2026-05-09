@@ -1,0 +1,13 @@
+dash>=2.17.0,<3.0.0
+dash-bootstrap-components>=1.6.0,<2.0.0
+plotly>=5.24.1,<6.0.0
+pandas>=2.2.0,<3.0.0
+pyarrow>=18.0.0,<25.0.0
+python-dotenv>=1.0.1
+b2sdk>=2.5.0
+numpy>=2.0.0,<3.0.0
+open3d>=0.18.0
+laspy[lazrs]>=2.5.0
+plyfile>=1.0.3
+rerun-sdk>=0.31.2,<0.32.0
+pyyaml
