@@ -477,6 +477,99 @@ pre {
     line-height: 1.45;
 }
 
+.prep-node-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.prep-node-card {
+    min-height: 150px;
+    background: #101419;
+    border: 1px solid var(--app-border-soft);
+    border-radius: 8px;
+    padding: 14px;
+}
+
+.prep-node-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.prep-node-name {
+    color: var(--app-text);
+    font-size: 14px;
+    font-weight: 720;
+}
+
+.prep-node-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+}
+
+.prep-node-dot-connected {
+    background: var(--app-success);
+    box-shadow: 0 0 0 3px rgba(93, 211, 158, 0.13);
+}
+
+.prep-node-dot-warning {
+    background: var(--app-warning);
+    box-shadow: 0 0 0 3px rgba(242, 184, 75, 0.13);
+}
+
+.prep-node-dot-offline {
+    background: var(--app-danger);
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.13);
+}
+
+.prep-node-state {
+    font-size: 19px;
+    font-weight: 760;
+    line-height: 1.15;
+}
+
+.prep-node-state-connected {
+    color: var(--app-success);
+}
+
+.prep-node-state-warning {
+    color: var(--app-warning);
+}
+
+.prep-node-state-offline {
+    color: var(--app-danger);
+}
+
+.prep-node-detail {
+    min-height: 38px;
+    color: var(--app-muted);
+    font-size: 12px;
+    line-height: 1.4;
+    margin-top: 8px;
+    overflow-wrap: anywhere;
+}
+
+.prep-node-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.prep-node-chip {
+    color: #cbd5df;
+    background: var(--app-surface-2);
+    border: 1px solid var(--app-border);
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 11px;
+    line-height: 1;
+}
+
 .form-check-input:checked {
     background-color: var(--app-accent);
     border-color: var(--app-accent);
@@ -494,6 +587,10 @@ pre {
     }
 
     .prep-flow {
+        grid-template-columns: 1fr;
+    }
+
+    .prep-node-grid {
         grid-template-columns: 1fr;
     }
 }
@@ -754,7 +851,7 @@ pre {
     background: rgba(255, 255, 255, 0.09);
 }
 
-/* ── Stat bar ─────────────────────────────────────────────────────── */
+/* ── Backend status bar ───────────────────────────────────────────── */
 
 .lp-stats {
     position: relative;
@@ -768,9 +865,10 @@ pre {
 }
 
 .lp-st {
-    padding: 13px 12px;
-    text-align: center;
+    padding: 12px 14px;
+    text-align: left;
     border-right: 1px solid #25303a;
+    min-width: 0;
 }
 
 .lp-st:last-child {
@@ -778,7 +876,7 @@ pre {
 }
 
 .lp-sv {
-    font-size: 20px;
+    font-size: 15px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: 0;
@@ -788,8 +886,70 @@ pre {
 .lp-sl {
     font-size: 10.5px;
     color: #9ca8b4;
-    margin-top: 5px;
+    margin-top: 6px;
     line-height: 1.35;
+}
+
+.lp-status-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 7px;
+}
+
+.lp-status-service {
+    color: #dbe4ee;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.lp-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+}
+
+.lp-status-dot-connected {
+    background: #3dd6b5;
+    box-shadow: 0 0 0 3px rgba(61, 214, 181, 0.13);
+}
+
+.lp-status-dot-warning {
+    background: #f2b84b;
+    box-shadow: 0 0 0 3px rgba(242, 184, 75, 0.13);
+}
+
+.lp-status-dot-offline {
+    background: #ff6b6b;
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.13);
+}
+
+.lp-status-dot-checking {
+    background: #7d8894;
+    box-shadow: 0 0 0 3px rgba(125, 136, 148, 0.13);
+}
+
+.lp-status-value-connected {
+    color: #3dd6b5;
+}
+
+.lp-status-value-warning {
+    color: #f2b84b;
+}
+
+.lp-status-value-offline {
+    color: #ff6b6b;
+}
+
+.lp-status-value-checking {
+    color: #bde7ff;
+}
+
+.lp-status-detail {
+    min-height: 28px;
+    overflow-wrap: anywhere;
 }
 
 /* ── Pipeline stage section label ────────────────────────────────── */
@@ -827,7 +987,7 @@ pre {
 
 .lp-cards {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
     padding: 0;
 }
@@ -932,17 +1092,13 @@ pre {
 
 @media (max-width: 1200px) {
     .lp-cards {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 
 @media (max-width: 900px) {
     .lp-hero {
         min-height: clamp(340px, 48vh, 520px);
-    }
-
-    .lp-cards {
-        grid-template-columns: repeat(2, 1fr);
     }
 
     .lp-stats {

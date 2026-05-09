@@ -39,7 +39,6 @@ from services.parquet_service import (
 )
 
 from services.b2_service import (
-    upload_file_to_b2,
     upload_large_file_to_b2,
     upload_folder_to_b2,
     delete_b2_prefix,
@@ -351,105 +350,7 @@ def select_dataset(selected_rows, table_data):
 
 
 # -------------------------------------------------------------------
-# 3. Small File Upload Callback
-# -------------------------------------------------------------------
-
-@callback(
-    Output("upload-status-store", "data"),
-    Output("upload-message", "children"),
-    Output("upload-result-details", "children"),
-    Input("upload-button", "n_clicks"),
-    State("dataset-id-input", "value"),
-    State("dataset-name-input", "value"),
-    State("upload-mode-dropdown", "value"),
-    State("dataset-description-input", "value"),
-    State("raw-file-upload", "contents"),
-    State("raw-file-upload", "filename"),
-    prevent_initial_call=True,
-)
-def handle_upload(
-    n_clicks,
-    dataset_id,
-    dataset_name,
-    upload_mode,
-    description,
-    contents,
-    filenames,
-):
-    if not dataset_id:
-        return None, dbc.Alert("Please enter a Dataset ID.", color="danger"), ""
-
-    dataset_id = dataset_id.strip()
-
-    if not dataset_name:
-        dataset_name = dataset_id
-
-    if not contents:
-        return (
-            None,
-            dbc.Alert(
-                "Please select at least one file using the upload box above.",
-                color="danger",
-            ),
-            "",
-        )
-
-    if isinstance(contents, str):
-        contents = [contents]
-        filenames = [filenames]
-
-    try:
-        upload_results = []
-
-        for file_content, filename in zip(contents, filenames):
-            result = upload_file_to_b2(
-                dataset_id=dataset_id,
-                filename=filename,
-                file_content_base64=file_content,
-            )
-            upload_results.append(result)
-
-        point_cloud_filenames = [
-            item["filename"]
-            for item in upload_results
-            if item.get("file_role") == "point_cloud_tile"
-        ]
-
-        finalize_uploaded_dataset(
-            dataset_id=dataset_id,
-            dataset_name=dataset_name,
-            upload_mode=upload_mode,
-            description=description,
-            point_cloud_filenames=point_cloud_filenames,
-            upload_results=upload_results,
-        )
-
-        result_card = build_upload_result_card(
-            title="Small File Upload Confirmation",
-            upload_results=upload_results,
-        )
-
-        return (
-            {"status": "uploaded", "dataset_id": dataset_id},
-            dbc.Alert(
-                f"Small file upload completed successfully for dataset: {dataset_id}",
-                color="success",
-            ),
-            result_card,
-        )
-
-    except Exception as e:
-        print(f"[SMALL UPLOAD ERROR] {e}")
-        mark_upload_failed_safely(dataset_id, e)
-        return (
-            {"status": "failed", "dataset_id": dataset_id},
-            dbc.Alert(f"Small file upload failed: {str(e)}", color="danger"),
-            "",
-        )
-
-
-# -------------------------------------------------------------------
-# 4. Large Single Tile + Optional Label Map Upload
+# 3. Large Single Tile + Optional Label Map Upload
 # -------------------------------------------------------------------
 
 @callback(
@@ -554,7 +455,7 @@ def handle_large_file_upload(
 
 
 # -------------------------------------------------------------------
-# 5. Large Folder Upload Callback
+# 4. Large Folder Upload Callback
 # -------------------------------------------------------------------
 
 @callback(
