@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from services.b2_service import B2_BUCKET_NAME
 from services.metadata_service import load_dataset_metadata
+from services.mlflow_service import DEFAULT_MLFLOW_TRACKING_URI
 
 
 load_dotenv()
@@ -16,7 +17,7 @@ load_dotenv()
 
 PREPROCESSING_SCRIPT_PATH = os.getenv(
     "PREPROCESSING_SCRIPT_PATH",
-    "/Users/sanskarsrivastava/Desktop/TEST/mls_preprocessing_airflow/preprocess_mls_v9_compat.py",
+    "/Users/sanskarsrivastava/Desktop/preprocessing/preprocess_mls_v9_compat.py",
 )
 REMOTE_SCRIPT_PATH = os.getenv(
     "REMOTE_PREPROCESSING_SCRIPT_PATH",
@@ -55,8 +56,9 @@ def get_preprocessing_script_info():
             else "Not found on this controller"
         ),
         "purpose": (
-            "Builds train/val/test or inference-ready point-cloud blocks for "
-            "PointNet++, RandLA-Net, and PTv3/Pointcept without running on the Dash controller."
+            "Stages bronze raw MLS tiles, writes the silver conformed cloud, "
+            "then builds gold model-ready outputs for PointNet++, RandLA-Net, "
+            "and PTv3/Pointcept without running on the Dash controller."
         ),
     }
 
@@ -213,6 +215,12 @@ def build_airflow_conf(
     ignore_labels=None,
     execution_target=None,
     airflow_queue=None,
+    mlflow_tracking_uri=DEFAULT_MLFLOW_TRACKING_URI,
+    mlflow_experiment="mls-preprocessing",
+    mlflow_run_name=None,
+    dvc_remote="b2remote",
+    disable_mlflow=False,
+    mlflow_log_artifacts=True,
     run_id=None,
 ):
     dataset_id = (dataset_id or "").strip()
@@ -237,7 +245,7 @@ def build_airflow_conf(
         "prep_version": prep_version,
         "run_id": run_id,
         "execution_target": execution_target or "any_gpu_worker",
-        "airflow_queue": airflow_queue or "gpu_worker",
+        "airflow_queue": airflow_queue or "system1",
         "controller_runs_script_locally": False,
         "dag_id": AIRFLOW_DAG_ID,
         "script": get_preprocessing_script_info(),
@@ -283,6 +291,12 @@ def build_airflow_conf(
             "save_ply": bool(save_ply),
             "compress_output": bool(compress_output),
             "write_silver": bool(write_silver),
+            "mlflow_tracking_uri": (mlflow_tracking_uri or "").strip() or DEFAULT_MLFLOW_TRACKING_URI,
+            "mlflow_experiment": (mlflow_experiment or "").strip() or "mls-preprocessing",
+            "mlflow_run_name": (mlflow_run_name or "").strip() or None,
+            "dvc_remote": (dvc_remote or "").strip() or "b2remote",
+            "disable_mlflow": bool(disable_mlflow),
+            "mlflow_no_artifacts": not bool(mlflow_log_artifacts),
         },
     }
 
@@ -333,10 +347,22 @@ def build_remote_command(conf):
         ("--randla_overlap", "randla_overlap"),
         ("--ptv3_scene_length", "ptv3_scene_length"),
         ("--num_workers", "num_workers"),
+        ("--mlflow_tracking_uri", "mlflow_tracking_uri"),
+        ("--mlflow_experiment", "mlflow_experiment"),
+        ("--mlflow_run_name", "mlflow_run_name"),
+        ("--dvc_remote", "dvc_remote"),
     ]:
         _append_value(command, flag, args.get(key))
 
-    for flag in ["compute_normals", "include_density", "save_ply", "compress_output", "cleanup_stage"]:
+    for flag in [
+        "compute_normals",
+        "include_density",
+        "save_ply",
+        "compress_output",
+        "cleanup_stage",
+        "disable_mlflow",
+        "mlflow_no_artifacts",
+    ]:
         if args.get(flag):
             command.append(f"--{flag}")
 

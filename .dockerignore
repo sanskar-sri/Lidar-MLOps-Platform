@@ -1,0 +1,26 @@
+# Python
+.venvvv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Environment & secrets
+.env
+.env.*
+
+# Git
+.git/
+.gitignore
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Data (mount at runtime instead)
+data/
+
+# Dev artifacts
+*.log
+*.tmp

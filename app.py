@@ -52,8 +52,18 @@ app.layout = dbc.Container(
                         active="exact",
                     ),
                     dbc.NavLink(
+                        "Control Panel",
+                        href="/control-panel",
+                        active="exact",
+                    ),
+                    dbc.NavLink(
                         "Preprocessing",
                         href="/preprocessing",
+                        active="exact",
+                    ),
+                    dbc.NavLink(
+                        "Training",
+                        href="/training",
                         active="exact",
                     ),
                 ],
@@ -82,7 +92,7 @@ if __name__ == "__main__":
     )
     app.run(
         debug=debug_enabled,
-        host="127.0.0.1",
+        host=os.getenv("DASH_HOST", "0.0.0.0"),
         port=port,
         use_reloader=False,
     )

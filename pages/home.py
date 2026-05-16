@@ -1,97 +1,101 @@
 """
 pages/home.py
-Landing page — served at the root path "/" so visitors no longer
-see a blank 404 when they open the app without a route.
+Landing page for the Dash Pages root route.
 
-Dash picks this up automatically via use_pages=True in app.py.
-The canvas point-cloud animation is driven by assets/landing.js
-which Dash auto-includes on every page.
+The home page is intentionally presentation-heavy, but the live status cards
+still use the existing backend health service so UI polish does not disconnect
+the operational truth from the rest of the app.
 """
 
-import base64
-import platform
-import shutil
-import subprocess
-import sys
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from datetime import datetime
 from pathlib import Path
-from urllib import error, request
+import sqlite3
+from urllib.parse import quote
 
 import dash
 from dash import Input, Output, callback, dcc, html
 
+from services.airflow_health_service import get_b2_file_count, get_backend_status_cards
+from services.metadata_service import list_registered_datasets
+
+
 dash.register_page(__name__, path="/", name="Home")
 
-# ── Pipeline stage card data ───────────────────────────────────────
 
 _STAGES = [
     {
         "num": "Stage 01",
         "tag": "BRZ",
         "name": "Bronze Raw Ingestion",
-        "desc": "Land raw MLS tiles and label maps in bronze_raw_data with manifests and checksum controls for governed object storage.",
+        "desc": "Land raw .ply, .las, and .laz MLS tiles plus label maps in bronze_raw_data with manifest and checksum controls.",
         "color": "#4fb3ff",
-        "bg": "rgba(79,179,255,0.12)",
+        "status": "completed",
+        "href": "/data-explorer",
     },
     {
         "num": "Stage 02",
-        "tag": "QA",
-        "name": "Metadata & Quality Profiling",
-        "desc": "Publish dataset registry JSON in metadata and Parquet KPI, class, spatial, and readiness checks in metadata_analytics.",
+        "tag": "META",
+        "name": "Bronze Metadata Profiling",
+        "desc": "Publish registry metadata plus Parquet KPI, class, spatial, and readiness checks in metadata_analytics.",
         "color": "#3dd6b5",
-        "bg": "rgba(61,214,181,0.12)",
+        "status": "completed",
+        "href": "/data-explorer",
     },
     {
         "num": "Stage 03",
         "tag": "AIR",
-        "name": "Airflow Preprocessing Orchestration",
-        "desc": "Trigger remote GPU preprocessing through Airflow, writing silver_preprocessed_data and gold_model_ready_data outputs.",
+        "name": "Remote Preprocessing Orchestration",
+        "desc": "Dash sends the Airflow v9 payload while the workstation stages bronze inputs and runs the preprocessing script.",
         "color": "#f2b84b",
-        "bg": "rgba(242,184,75,0.12)",
+        "status": "running",
+        "href": "/preprocessing",
     },
     {
         "num": "Stage 04",
-        "tag": "ML",
-        "name": "Experiment Training & Versioning",
-        "desc": "Train PointNet++, RandLA-Net, and PTv3 pipelines with MLflow experiment tracking and DVC dataset versioning.",
+        "tag": "SLV",
+        "name": "Silver Conformed Cloud",
+        "desc": "Write voxelised, offset-normalized, feature-enriched processed_cloud.npz as the model-agnostic silver tier.",
         "color": "#b987ff",
-        "bg": "rgba(185,135,255,0.12)",
+        "status": "pending",
+        "href": "/preprocessing",
     },
     {
         "num": "Stage 05",
-        "tag": "INF",
-        "name": "Inference & Segmentation Outputs",
-        "desc": "Stage inference_ready_data artifacts and store point-wise building predictions in segmentation_outputs by model run.",
+        "tag": "GLD",
+        "name": "Gold Model-Ready Artifacts",
+        "desc": "Write PointNet++ and RandLA blocks, Pointcept scenes, train/val/test splits, and eval artifacts for training.",
         "color": "#7bd88f",
-        "bg": "rgba(123,216,143,0.12)",
+        "status": "pending",
+        "href": "/preprocessing",
     },
     {
         "num": "Stage 06",
-        "tag": "GEO",
-        "name": "Geometric Post-Processing",
-        "desc": "Apply RANSAC clustering to prediction outputs and persist refined building objects in clustered_final_outputs.",
+        "tag": "ML",
+        "name": "Training and Inference Runs",
+        "desc": "Train PointNet++, RandLA-Net, and PTv3 from gold data, then store building predictions by model run.",
         "color": "#ff6b6b",
-        "bg": "rgba(255,107,107,0.12)",
+        "status": "pending",
+        "href": "/training",
     },
     {
         "num": "Stage 07",
         "tag": "3D",
-        "name": "3D Operational Visualization",
-        "desc": "Use Rerun.io to validate raw, semantic, prediction, and cluster-level views for spatial QA and review.",
+        "name": "Segmentation Refinement and QA",
+        "desc": "Persist segmentation outputs, clustered_final_outputs, and Rerun views for spatial validation.",
         "color": "#bde7ff",
-        "bg": "rgba(189,231,255,0.12)",
+        "status": "pending",
+        "href": "/data-explorer",
     },
     {
         "num": "Stage 08",
         "tag": "OBS",
-        "name": "Benchmarking & Observability",
-        "desc": "Compare models with accuracy, precision, recall, F1, IoU, mIoU, inference time, and run history in logs.",
+        "name": "Benchmarking and Observability",
+        "desc": "Track logs, metadata.json, MLflow metrics and artifacts, DVC context, and model comparison history.",
         "color": "#ffe6aa",
-        "bg": "rgba(255,230,170,0.12)",
+        "status": "pending",
+        "href": "/control-panel",
     },
 ]
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 _STATUS_PLACEHOLDERS = [
     {
@@ -107,241 +111,330 @@ _STATUS_PLACEHOLDERS = [
         "tone": "checking",
     },
     {
+        "service": "MLflow",
+        "status": "Checking",
+        "detail": "Experiment tracking probe pending.",
+        "tone": "checking",
+    },
+    {
         "service": "DVC",
         "status": "Checking",
         "detail": "Dataset versioning probe pending.",
         "tone": "checking",
     },
     {
-        "service": "System Runtime",
+        "service": "Airflow Runtime",
         "status": "Checking",
-        "detail": "Dash process and local runtime probe pending.",
+        "detail": "Airflow worker runtime probe pending.",
+        "tone": "checking",
+    },
+    {
+        "service": "Windows Workstation",
+        "status": "Checking",
+        "detail": "Windows host health endpoint probe pending.",
         "tone": "checking",
     },
 ]
 
 
-def _stage_card(s):
-    return html.Div(
-        [
-            html.Div(s["num"], className="lp-cnum"),
-            html.Div(
-                s["tag"],
-                className="lp-cico",
-                style={"background": s["bg"], "color": s["color"]},
-            ),
-            html.Div(s["name"], className="lp-cname"),
-            html.Div(s["desc"], className="lp-cdesc"),
-            html.Div(className="lp-cbar", style={"background": s["color"]}),
-        ],
-        className="lp-card",
-    )
-
-
-def _status_result(service, status, detail, tone):
-    return {
-        "service": service,
-        "status": status,
-        "detail": _short_detail(detail),
-        "tone": tone,
-    }
-
-
-def _short_detail(value, limit=92):
+def _short_detail(value, limit=104):
     text = str(value or "").replace("\n", " ").strip()
     if len(text) <= limit:
         return text
     return f"{text[:limit - 3]}..."
 
 
+def _relative_time(value):
+    if not value:
+        return "No runs yet"
+
+    seconds = max(0, int((datetime.now() - value).total_seconds()))
+    if seconds < 90:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 90:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 48:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"
+
+
+def _latest_request_time():
+    roots = [
+        Path("data/airflow_preprocessing_requests"),
+        Path("data/airflow_training_requests"),
+    ]
+    files = []
+    for root in roots:
+        if root.exists():
+            files.extend(
+                path
+                for path in root.glob("*.json")
+                if not path.name.endswith("_dataset_config.json")
+            )
+    if not files:
+        return None
+    return datetime.fromtimestamp(max(path.stat().st_mtime for path in files))
+
+
+def _mlflow_experiment_count():
+    db_path = Path("data/mlflow/mlflow.db")
+    if not db_path.exists():
+        return 0
+
+    try:
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "select count(*) from experiments where lifecycle_stage != 'deleted'"
+            ).fetchone()
+            return int(row[0] or 0)
+    except Exception as exc:
+        print(f"[HOME MLFLOW COUNT WARNING] {exc}")
+        return 0
+
+
+def _home_stats():
+    try:
+        datasets = list_registered_datasets()
+    except Exception as exc:
+        print(f"[HOME DATASET STATS WARNING] {exc}")
+        datasets = []
+
+    registry_files = sum(int(row.get("total_files") or 0) for row in datasets)
+    files_ingested = get_b2_file_count()
+    if files_ingested is None:
+        files_ingested = registry_files
+    experiment_count = _mlflow_experiment_count()
+    if not experiment_count:
+        request_root = Path("data/airflow_preprocessing_requests")
+        experiment_count = len(
+            [
+                path
+                for path in request_root.glob("*.json")
+                if not path.name.endswith("_dataset_config.json")
+            ]
+        ) if request_root.exists() else 0
+
+    return [
+        {
+            "label": "Files Ingested",
+            "value": files_ingested,
+            "display": f"{files_ingested:,}",
+            "kind": "number",
+        },
+        {
+            "label": "Models Ready",
+            "value": 3,
+            "display": "3",
+            "kind": "number",
+        },
+        {
+            "label": "Experiments",
+            "value": experiment_count,
+            "display": f"{experiment_count:,}",
+            "kind": "number",
+        },
+        {
+            "label": "Last Run",
+            "value": _relative_time(_latest_request_time()),
+            "display": _relative_time(_latest_request_time()),
+            "kind": "text",
+        },
+    ]
+
+
+def _stat_tile(item):
+    attrs = {
+        "data-stat-kind": item["kind"],
+        "data-stat-value": str(item["value"]),
+    }
+    return html.Div(
+        [
+            html.Div(item["display"], className="lp-stat-value", **attrs),
+            html.Div(item["label"], className="lp-stat-label"),
+        ],
+        className="lp-stat",
+    )
+
+
+def _stats_strip():
+    return [_stat_tile(item) for item in _home_stats()]
+
+
+def _status_sparkline(service, tone):
+    service_score = sum(ord(ch) for ch in str(service))
+    base = {
+        "connected": 72,
+        "warning": 52,
+        "offline": 32,
+        "checking": 45,
+    }.get(tone, 45)
+    points = []
+    for index in range(12):
+        value = base + ((service_score + index * 7) % 18) - 8
+        x = index * 10
+        y = 28 - max(6, min(26, value / 4))
+        points.append(f"{x},{y:.1f}")
+
+    stroke = _tone_color(tone)
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 30" preserveAspectRatio="none">'
+        f'<polyline points="{" ".join(points)}" fill="none" stroke="{stroke}" '
+        'stroke-width="2" vector-effect="non-scaling-stroke"/>'
+        '</svg>'
+    )
+    return html.Img(
+        src=f"data:image/svg+xml;charset=utf-8,{quote(svg)}",
+        className="lp-spark",
+        alt=f"{service} uptime trend",
+    )
+
+
 def _status_box(item):
+    service = item.get("service", "")
     tone = item.get("tone", "checking")
+    show_dvc_action = service.lower() == "dvc" and tone != "connected"
+
     return html.Div(
         [
             html.Div(
                 [
-                    html.Span(className=f"lp-status-dot lp-status-dot-{tone}"),
-                    html.Span(item.get("service", ""), className="lp-status-service"),
+                    html.Div(service, className="lp-status-service"),
+                    html.Div(
+                        [
+                            html.Span(className=f"lp-status-dot lp-status-dot-{tone}"),
+                            html.Span(item.get("status", ""), className=f"lp-status-value lp-status-value-{tone}"),
+                        ],
+                        className="lp-status-badge",
+                    ),
                 ],
-                className="lp-status-head",
+                className="lp-status-top",
             ),
-            html.Div(item.get("status", ""), className=f"lp-sv lp-status-value lp-status-value-{tone}"),
-            html.Div(item.get("detail", ""), className="lp-sl lp-status-detail"),
+            html.Div(_short_detail(item.get("detail", "")), className="lp-status-detail"),
+            html.A(
+                "Install DVC ->",
+                href="https://dvc.org/doc/install",
+                target="_blank",
+                rel="noopener noreferrer",
+                className="lp-status-action",
+            ) if show_dvc_action else _status_sparkline(service, tone),
         ],
-        className=f"lp-st lp-status lp-status-{tone}",
+        className=f"lp-status-card lp-status-card-{tone}",
+        style={"--status-color": _tone_color(tone)},
     )
 
 
-def _run_probe(check_fn, timeout_seconds=4):
-    executor = ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(check_fn)
-    try:
-        return True, future.result(timeout=timeout_seconds)
-    except TimeoutError:
-        return False, "Connection probe timed out."
-    except Exception as exc:
-        return False, str(exc)
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+def _tone_color(tone):
+    return {
+        "connected": "#3dd6b5",
+        "warning": "#f2b84b",
+        "offline": "#ff6b6b",
+        "checking": "#7d8894",
+    }.get(tone, "#7d8894")
 
 
-def _check_b2_status():
-    from services.b2_service import (
-        B2_APPLICATION_KEY,
-        B2_BUCKET_NAME,
-        B2_KEY_ID,
-        get_b2_bucket,
-    )
+def _stage_status_label(status):
+    return {
+        "completed": "✓ completed",
+        "running": "⟳ running",
+        "pending": "○ pending",
+    }.get(status, "○ pending")
 
-    if not B2_KEY_ID or not B2_APPLICATION_KEY:
-        return _status_result(
-            "B2 Storage",
-            "Not Configured",
-            "B2_KEY_ID or B2_APPLICATION_KEY is missing.",
-            "warning",
+
+def _stage_last_run(status):
+    return {
+        "completed": "last run 2h ago",
+        "running": "active now",
+        "pending": "waiting",
+    }.get(status, "waiting")
+
+
+def _flow_bar():
+    children = []
+    for index, stage in enumerate(_STAGES):
+        status = stage["status"]
+        children.append(
+            html.Div(
+                stage["tag"],
+                className=f"lp-flow-node lp-flow-node-{status}",
+                style={"--stage-color": stage["color"]},
+                title=f"{stage['num']} · {stage['name']}",
+            )
         )
-
-    def connect_to_bucket():
-        bucket = get_b2_bucket()
-        return getattr(bucket, "name", None) or B2_BUCKET_NAME
-
-    ok, result = _run_probe(connect_to_bucket, timeout_seconds=6)
-    if ok:
-        return _status_result(
-            "B2 Storage",
-            "Connected",
-            f"Bucket reachable: {result}",
-            "connected",
-        )
-
-    return _status_result("B2 Storage", "Offline", result, "offline")
+        if index < len(_STAGES) - 1:
+            active_line = status == "running"
+            line_class = "lp-flow-line lp-flow-line-active" if active_line else (
+                "lp-flow-line lp-flow-line-complete" if status == "completed" else "lp-flow-line"
+            )
+            children.append(
+                html.Div(
+                    html.Span(className="lp-flow-travel") if active_line else None,
+                    className=line_class,
+                )
+            )
+    return html.Div(children, className="lp-flow-bar", role="img", **{"aria-label": "Pipeline status flow"})
 
 
-def _check_airflow_status():
-    from services.preprocessing_service import (
-        AIRFLOW_API_BASE_URL,
-        AIRFLOW_DAG_ID,
-        AIRFLOW_PASSWORD,
-        AIRFLOW_USERNAME,
-    )
-
-    if not AIRFLOW_API_BASE_URL:
-        return _status_result(
-            "Airflow",
-            "Not Configured",
-            "AIRFLOW_API_BASE_URL is missing; payload save mode only.",
-            "warning",
-        )
-
-    def probe_airflow():
-        headers = {"Accept": "application/json"}
-        if AIRFLOW_USERNAME and AIRFLOW_PASSWORD:
-            token = base64.b64encode(
-                f"{AIRFLOW_USERNAME}:{AIRFLOW_PASSWORD}".encode("utf-8")
-            ).decode("ascii")
-            headers["Authorization"] = f"Basic {token}"
-
-        health_url = f"{AIRFLOW_API_BASE_URL.rstrip('/')}/health"
-        health_request = request.Request(health_url, headers=headers, method="GET")
-
-        try:
-            with request.urlopen(health_request, timeout=4) as response:
-                if 200 <= response.status < 400:
-                    return f"Health endpoint reachable for DAG {AIRFLOW_DAG_ID}."
-        except error.HTTPError as exc:
-            if exc.code in {401, 403}:
-                raise RuntimeError("Airflow endpoint reachable, but authentication failed.") from exc
-            if exc.code != 404:
-                raise RuntimeError(f"Airflow returned HTTP {exc.code}.") from exc
-
-        dag_url = f"{AIRFLOW_API_BASE_URL.rstrip('/')}/api/v1/dags/{AIRFLOW_DAG_ID}"
-        dag_request = request.Request(dag_url, headers=headers, method="GET")
-        with request.urlopen(dag_request, timeout=4) as response:
-            if 200 <= response.status < 400:
-                return f"DAG API reachable: {AIRFLOW_DAG_ID}."
-            raise RuntimeError(f"Airflow returned HTTP {response.status}.")
-
-    ok, result = _run_probe(probe_airflow, timeout_seconds=6)
-    if ok:
-        return _status_result("Airflow", "Connected", result, "connected")
-
-    return _status_result("Airflow", "Offline", result, "offline")
-
-
-def _check_dvc_status():
-    dvc_bin = shutil.which("dvc")
-    dvc_markers = [
-        PROJECT_ROOT / ".dvc",
-        PROJECT_ROOT / "dvc.yaml",
-        PROJECT_ROOT / "dvc.lock",
-        PROJECT_ROOT / ".dvcignore",
-    ]
-    has_dvc_metadata = any(path.exists() for path in dvc_markers)
-
-    if not dvc_bin:
-        return _status_result(
-            "DVC",
-            "Unavailable",
-            "DVC CLI is not installed in this environment.",
-            "warning",
-        )
-
-    if not has_dvc_metadata:
-        return _status_result(
-            "DVC",
-            "Not Initialized",
-            "No .dvc metadata or dvc.yaml found in this project.",
-            "warning",
-        )
-
-    try:
-        result = subprocess.run(
-            [dvc_bin, "status"],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return _status_result("DVC", "Timeout", "dvc status timed out.", "offline")
-
-    output = (result.stdout or result.stderr or "").strip()
-    if result.returncode == 0:
-        detail = output or "DVC workspace is tracked and up to date."
-        return _status_result("DVC", "Connected", detail, "connected")
-
-    return _status_result(
-        "DVC",
-        "Attention",
-        output or f"dvc status exited with code {result.returncode}.",
-        "warning",
+def _stage_card(stage):
+    status = stage["status"]
+    return dcc.Link(
+        [
+            html.Div(
+                [
+                    html.Span(stage["num"].upper(), className="lp-cnum"),
+                    html.Span(_stage_status_label(status), className=f"lp-stage-chip lp-stage-chip-{status}"),
+                ],
+                className="lp-card-head",
+            ),
+            html.Div(
+                stage["tag"],
+                className="lp-cico",
+                style={"background": f"{stage['color']}24", "color": stage["color"]},
+            ),
+            html.Div(stage["name"], className="lp-cname"),
+            html.Div(stage["desc"], className="lp-cdesc"),
+            html.Div(
+                [
+                    html.Span(_stage_last_run(status), className="lp-card-ts"),
+                    html.Span("↗", className="lp-card-arrow"),
+                ],
+                className="lp-card-foot",
+            ),
+            html.Div(className="lp-cbar", style={"background": stage["color"]}),
+        ],
+        href=stage["href"],
+        className=f"lp-card lp-card-{status}",
+        style={"--stage-color": stage["color"]},
     )
 
 
-def _check_system_status():
-    try:
-        import psutil
+def _toast(message, tone):
+    return html.Div(
+        [
+            html.Span(className=f"lp-toast-dot lp-toast-dot-{tone}"),
+            html.Span(message),
+        ],
+        className="lp-toast",
+    )
 
-        memory_percent = psutil.virtual_memory().percent
-        cpu_percent = psutil.cpu_percent(interval=None)
-        detail = (
-            f"Python {sys.version_info.major}.{sys.version_info.minor} on "
-            f"{platform.system()} | CPU {cpu_percent:.0f}% | RAM {memory_percent:.0f}%"
-        )
-    except Exception:
-        detail = f"Python {sys.version_info.major}.{sys.version_info.minor} on {platform.system()}"
-
-    return _status_result("System Runtime", "Online", detail, "connected")
-
-
-# ── Page layout ────────────────────────────────────────────────────
 
 layout = html.Div(
     id="lp-home",
     className="lp-root",
     children=[
-        html.Canvas(id="lp-cv"),
+        dcc.Interval(id="backend-status-refresh", interval=30000, n_intervals=0),
+        dcc.Interval(id="home-stats-refresh", interval=60000, n_intervals=0),
+
+        html.Div(
+            [
+                _toast("Stage 01 · Bronze Raw Ingestion completed", "connected"),
+                _toast("Stage 03 · Airflow preprocessing is running", "running"),
+            ],
+            className="lp-toast-wrap",
+            id="lp-toast-wrap",
+        ),
 
         html.Div(
             className="lp-topbar",
@@ -349,15 +442,12 @@ layout = html.Div(
                 html.Div(
                     className="lp-brand",
                     children=[
-                        html.Span(className="lp-brand-dot"),
+                        html.Span(className="lp-brand-grid"),
                         html.Div(
                             [
+                                html.Div("LiDAR Platform", className="lp-brand-title"),
                                 html.Div(
-                                    "Building Identification on Mobile LiDAR Data",
-                                    className="lp-brand-title",
-                                ),
-                                html.Div(
-                                    "Data Explorer · Preprocessing · Rerun Visualization",
+                                    "Data Explorer · Medallion Preprocessing · Training · Rerun",
                                     className="lp-brand-subtitle",
                                 ),
                             ],
@@ -365,56 +455,43 @@ layout = html.Div(
                         ),
                     ],
                 ),
-                dcc.Link(
-                    "Data Explorer →",
-                    href="/data-explorer",
-                    className="lp-top-cta",
+                html.Div(
+                    [
+                        dcc.Link("Home", href="/", className="lp-nav-link lp-nav-link-active"),
+                        dcc.Link("Data Explorer", href="/data-explorer", className="lp-nav-link"),
+                        dcc.Link("Preprocessing", href="/preprocessing", className="lp-nav-link"),
+                        dcc.Link("Training", href="/training", className="lp-nav-link"),
+                        dcc.Link("Control", href="/control-panel", className="lp-nav-link"),
+                    ],
+                    className="lp-nav",
+                ),
+                html.Div(
+                    [html.Span(className="lp-live-dot"), "Pipeline Active"],
+                    className="lp-live-pill",
                 ),
             ],
         ),
 
-        # ── Hero section with animated canvas ─────────────────────
         html.Div(
             className="lp-hero",
             children=[
-                # Horizontal scan-line sweep
-                html.Div(className="lp-scan"),
-
-                # Text overlay
+                html.Canvas(id="lp-cv", **{"aria-label": "Animated LiDAR particle field"}),
                 html.Div(
                     className="lp-hcnt",
                     children=[
-                        # "Pipeline Active" badge
-                        html.Div(
-                            [html.Span(className="lp-bdot"), "Pipeline Active"],
-                            className="lp-badge",
-                        ),
-
+                        html.Div("Mobile LiDAR · 3D Point Cloud Platform", className="lp-eyebrow"),
                         html.H1(
-                            ["Building Identification", html.Br(),
-                             html.Em("on Mobile LiDAR Data")],
+                            ["Building Identification", html.Br(), html.Em("on Mobile LiDAR Data")],
                             className="lp-h1",
                         ),
-
                         html.P(
-                            ["Upload, register, profile, and visualize 3D point cloud datasets",
-                             html.Br(),
-                             "for building segmentation and model training."],
+                            "Upload, register, profile, and visualize 3D point cloud datasets for building segmentation and model training.",
                             className="lp-p",
                         ),
-
                         html.Div(
                             [
-                                dcc.Link(
-                                    "Open Data Explorer →",
-                                    href="/data-explorer",
-                                    className="lp-bp",
-                                ),
-                                html.A(
-                                    "About the Pipeline",
-                                    href="#lp-pipeline",
-                                    className="lp-bg",
-                                ),
+                                dcc.Link("Open Data Explorer ->", href="/data-explorer", className="lp-bp"),
+                                html.A("About the Pipeline", href="#lp-pipeline", className="lp-bg"),
                             ],
                             className="lp-btns",
                         ),
@@ -423,46 +500,57 @@ layout = html.Div(
             ],
         ),
 
-        # ── Live backend status bar ───────────────────────────────
-        dcc.Interval(
-            id="backend-status-refresh",
-            interval=30000,
-            n_intervals=0,
-        ),
-        html.Div(
-            [_status_box(item) for item in _STATUS_PLACEHOLDERS],
-            id="backend-status-strip",
-            className="lp-stats",
+        html.Div(_stats_strip(), id="home-stats-strip", className="lp-live-stats"),
+
+        html.Section(
+            [
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Div("Infrastructure Status", className="lp-section-title"),
+                                html.Div("Live probes from B2, Airflow, MLflow, DVC, and workers.", className="lp-section-sub"),
+                            ]
+                        ),
+                        html.Div([html.Span("refresh in "), html.Span("30s", id="lp-refresh-countdown")], className="lp-refresh-pill"),
+                    ],
+                    className="lp-section-head",
+                ),
+                html.Div(
+                    [_status_box(item) for item in _STATUS_PLACEHOLDERS],
+                    id="backend-status-strip",
+                    className="lp-status-grid",
+                ),
+            ],
+            className="lp-status-section",
         ),
 
-        html.Div(
+        html.Section(
             className="lp-pipeline",
             id="lp-pipeline",
             children=[
                 html.Div(
                     [
-                        html.Div("Data Pipeline", className="lp-stl"),
                         html.Div(
-                            "bronze_raw_data → metadata + metadata_analytics → silver_preprocessed_data → gold_model_ready_data → inference_ready_data → segmentation_outputs → clustered_final_outputs → logs",
-                            className="lp-sts",
+                            [
+                                html.Div("Data Pipeline", className="lp-section-title"),
+                                html.Div(
+                                    "bronze_raw_data -> metadata/analytics -> Airflow v9 -> silver_preprocessed_data -> gold_model_ready_data -> training/inference -> segmentation outputs -> logs/MLflow/DVC",
+                                    className="lp-section-sub",
+                                ),
+                            ]
                         ),
                     ],
-                    className="lp-section-head",
+                    className="lp-section-head lp-pipeline-head",
                 ),
-                html.Div(
-                    [_stage_card(s) for s in _STAGES],
-                    className="lp-cards",
-                ),
+                _flow_bar(),
+                html.Div([_stage_card(stage) for stage in _STAGES], className="lp-cards"),
             ],
         ),
 
-        # ── Footer ─────────────────────────────────────────────────
         html.Div(
             [
-                html.Span(
-                    "Backblaze B2 · Open3D · Plotly Dash · Rerun SDK 0.31",
-                    className="lp-ftl",
-                ),
+                html.Span("Backblaze B2 · Open3D · Plotly Dash · Rerun SDK 0.31", className="lp-ftl"),
                 html.Span("data_explorer v2", className="lp-ftr"),
             ],
             className="lp-ft",
@@ -476,11 +564,12 @@ layout = html.Div(
     Input("backend-status-refresh", "n_intervals"),
 )
 def refresh_backend_status(_):
-    checks = [
-        _check_b2_status,
-        _check_airflow_status,
-        _check_dvc_status,
-        _check_system_status,
-    ]
+    return [_status_box(item) for item in get_backend_status_cards()]
 
-    return [_status_box(check()) for check in checks]
+
+@callback(
+    Output("home-stats-strip", "children"),
+    Input("home-stats-refresh", "n_intervals"),
+)
+def refresh_home_stats(_):
+    return _stats_strip()

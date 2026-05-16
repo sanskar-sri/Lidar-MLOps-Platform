@@ -9,8 +9,9 @@ load_dotenv()
 
 
 DEFAULT_TARGET_ID = "any_gpu_worker"
-DEFAULT_TARGET_NAME = "Any available GPU worker"
-DEFAULT_TARGET_QUEUE = "gpu_worker"
+DEFAULT_TARGET_NAME = "Any online compute node"
+DEFAULT_TARGET_QUEUE = os.getenv("DEFAULT_AIRFLOW_QUEUE", "system1").strip() or "system1"
+COMPUTE_HEALTH_POLL_MS = int(os.getenv("COMPUTE_HEALTH_POLL_MS", "2000"))
 
 
 def _split_roles(value):
@@ -43,10 +44,7 @@ def list_compute_nodes():
         except json.JSONDecodeError:
             pass
 
-    return [
-        _node_from_env("SYSTEM_1", "system1", "System 1", "system1"),
-        _node_from_env("SYSTEM_2", "system2_gpu", "System 2 GPU", "system2_gpu"),
-    ]
+    return [_node_from_env("SYSTEM_1", "system1", "System 1", "system1")]
 
 
 def _normalize_node(item):
@@ -100,14 +98,108 @@ def resolve_airflow_queue(execution_target):
     return DEFAULT_TARGET_QUEUE
 
 
-def _short_detail(value, limit=120):
+def _short_detail(value, limit=180):
     text = str(value or "").replace("\n", " ").strip()
     if len(text) <= limit:
         return text
     return f"{text[:limit - 3]}..."
 
 
+def _as_number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_percent(value):
+    number = _as_number(value)
+    if number is None:
+        return "n/a"
+    return f"{number:.0f}%" if number.is_integer() else f"{number:.1f}%"
+
+
+def _fmt_gb(value_mb):
+    number = _as_number(value_mb)
+    if number is None:
+        return "n/a"
+    return f"{number / 1024:.1f} GB"
+
+
+def _percent_from_values(used, total):
+    used_number = _as_number(used)
+    total_number = _as_number(total)
+    if used_number is None or not total_number:
+        return None
+    return (used_number / total_number) * 100
+
+
+def _metric(label, value, detail):
+    return {
+        "label": label,
+        "value": str(value),
+        "detail": str(detail or ""),
+    }
+
+
+def _build_metrics(payload):
+    resources = payload.get("resources") or {}
+    gpu = payload.get("gpu") or {}
+    metrics = []
+
+    cpu_percent = resources.get("cpu_percent")
+    if cpu_percent is not None:
+        metrics.append(_metric("CPU", _fmt_percent(cpu_percent), "processor load"))
+
+    memory_used = resources.get("memory_used_mb")
+    memory_total = resources.get("memory_total_mb")
+    if memory_used is not None or memory_total is not None:
+        memory_percent = resources.get("memory_percent")
+        if memory_percent is None:
+            memory_percent = _percent_from_values(memory_used, memory_total)
+        metrics.append(
+            _metric(
+                "RAM",
+                f"{_fmt_gb(memory_used)} / {_fmt_gb(memory_total)}",
+                _fmt_percent(memory_percent),
+            )
+        )
+
+    if gpu.get("available"):
+        gpu_percent = (
+            gpu.get("gpu_3d_percent")
+            if gpu.get("gpu_3d_percent") is not None
+            else gpu.get("utilization_percent")
+        )
+        gpu_detail = gpu.get("name") or "NVIDIA GPU"
+        if gpu.get("gpu_3d_percent") is not None:
+            gpu_detail = f"{gpu_detail} | Task Manager 3D"
+        elif gpu.get("nvidia_utilization_percent") is not None:
+            gpu_detail = f"{gpu_detail} | nvidia-smi"
+        metrics.append(
+            _metric(
+                "GPU",
+                _fmt_percent(gpu_percent),
+                gpu_detail,
+            )
+        )
+        metrics.append(
+            _metric(
+                "VRAM",
+                f"{_fmt_gb(gpu.get('memory_used_mb'))} / {_fmt_gb(gpu.get('memory_total_mb'))}",
+                _fmt_percent(
+                    gpu.get("memory_percent")
+                    if gpu.get("memory_percent") is not None
+                    else _percent_from_values(gpu.get("memory_used_mb"), gpu.get("memory_total_mb"))
+                ),
+            )
+        )
+
+    return metrics
+
+
 def _status(node, state, detail, tone, payload=None):
+    payload = payload or {}
     return {
         "id": node["id"],
         "name": node["name"],
@@ -117,7 +209,8 @@ def _status(node, state, detail, tone, payload=None):
         "state": state,
         "detail": _short_detail(detail),
         "tone": tone,
-        "payload": payload or {},
+        "metrics": _build_metrics(payload),
+        "payload": payload,
     }
 
 
@@ -147,14 +240,31 @@ def check_compute_node(node, timeout_seconds=3):
     remote_status = str(payload.get("status") or "").lower()
     if remote_status in {"ok", "healthy", "online", "ready"}:
         gpu = payload.get("gpu") or {}
+        resources = payload.get("resources") or {}
         gpu_name = gpu.get("name") or payload.get("gpu_name")
         docker = payload.get("docker") or "unknown"
         detail_parts = [
             f"Docker {docker}",
             f"queue {node.get('airflow_queue') or node['id']}",
         ]
+        if resources.get("cpu_percent") is not None:
+            detail_parts.append(f"CPU {_fmt_percent(resources.get('cpu_percent'))}")
+        if resources.get("memory_percent") is not None:
+            detail_parts.append(
+                f"RAM {_fmt_gb(resources.get('memory_used_mb'))}/{_fmt_gb(resources.get('memory_total_mb'))} ({_fmt_percent(resources.get('memory_percent'))})"
+            )
         if gpu_name:
-            detail_parts.append(f"GPU {gpu_name}")
+            gpu_detail = f"GPU {gpu_name}"
+            if gpu.get("gpu_3d_percent") is not None:
+                gpu_detail = f"{gpu_detail} {_fmt_percent(gpu.get('gpu_3d_percent'))} 3D"
+            elif gpu.get("utilization_percent") is not None:
+                gpu_detail = f"{gpu_detail} {_fmt_percent(gpu.get('utilization_percent'))}"
+            if gpu.get("memory_used_mb") is not None or gpu.get("memory_total_mb") is not None:
+                gpu_detail = (
+                    f"{gpu_detail}; VRAM {_fmt_gb(gpu.get('memory_used_mb'))}/"
+                    f"{_fmt_gb(gpu.get('memory_total_mb'))}"
+                )
+            detail_parts.append(gpu_detail)
         return _status(node, "Online", " | ".join(detail_parts), "connected", payload)
 
     return _status(
