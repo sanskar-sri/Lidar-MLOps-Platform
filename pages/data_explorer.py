@@ -1,14 +1,15 @@
 import json as _json
 import os
 import shutil
+from html import escape as escape_svg_text
+from urllib.parse import quote
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, State, callback
+from dash import html, dcc, Input, Output, State, callback, dash_table, ALL
 import plotly.graph_objects as go
 
 from components.upload_panel import upload_raw_data_panel
-from components.registry_panel import dataset_registry_panel
 from components.analytics_panels import (
     kpi_section,
     attribute_analytics_panel,
@@ -221,88 +222,361 @@ def pie_figure(data_frame, names, values, title, color_map=None):
     )
 
 
+def format_compact_number(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return value or "-"
+
+    if number >= 1_000_000_000:
+        return f"{number / 1_000_000_000:.1f}B"
+    if number >= 1_000_000:
+        return f"{number / 1_000_000:.1f}M"
+    if number >= 1_000:
+        return f"{number / 1_000:.1f}K"
+    return str(int(number))
+
+
+def build_dataset_cards(rows, selected_dataset_id=None):
+    if not rows:
+        return dbc.Alert(
+            "No registered datasets yet.",
+            color="secondary",
+            className="mb-0",
+        )
+
+    cards = []
+
+    for row in rows:
+        dataset_id = str(row.get("dataset_id") or "").strip()
+        if not dataset_id:
+            continue
+
+        selected = dataset_id == selected_dataset_id
+        card_class = "dataset-card dataset-card-selected" if selected else "dataset-card"
+
+        cards.append(
+            html.Button(
+                [
+                    html.Span(
+                        row.get("dataset_name") or dataset_id,
+                        className="dataset-card-title",
+                    ),
+                    html.Span(dataset_id, className="dataset-card-id"),
+                    html.Span(
+                        [
+                            html.Span(
+                                [
+                                    html.Span("Files", className="dataset-card-metric-label"),
+                                    html.Span(
+                                        format_compact_number(row.get("total_files")),
+                                        className="dataset-card-metric-value",
+                                    ),
+                                ],
+                                className="dataset-card-metric",
+                            ),
+                            html.Span(
+                                [
+                                    html.Span("Points", className="dataset-card-metric-label"),
+                                    html.Span(
+                                        format_compact_number(row.get("total_points")),
+                                        className="dataset-card-metric-value",
+                                    ),
+                                ],
+                                className="dataset-card-metric",
+                            ),
+                        ],
+                        className="dataset-card-metrics",
+                    ),
+                    html.Span(
+                        [
+                            html.Span(row.get("labels") or "Unknown", className="dataset-card-pill"),
+                            html.Span(row.get("status") or "unknown", className="dataset-card-status"),
+                        ],
+                        className="dataset-card-foot",
+                    ),
+                ],
+                id={"type": "dataset-card", "dataset_id": dataset_id},
+                n_clicks=0,
+                type="button",
+                className=card_class,
+            )
+        )
+
+    return cards or dbc.Alert(
+        "No usable dataset registry rows were found.",
+        color="warning",
+        className="mb-0",
+    )
+
+
+def hidden_dataset_table():
+    return dash_table.DataTable(
+        id="dataset-registry-table",
+        columns=[
+            {"name": "Dataset ID", "id": "dataset_id"},
+            {"name": "Dataset Name", "id": "dataset_name"},
+            {"name": "Files", "id": "total_files"},
+            {"name": "Points", "id": "total_points"},
+            {"name": "Labels", "id": "labels"},
+            {"name": "Status", "id": "status"},
+        ],
+        data=[],
+        selected_rows=[],
+        style_table={"display": "none"},
+    )
+
+
+def dataset_sidebar_panel():
+    return html.Aside(
+        className="data-explorer-sidebar",
+        children=[
+            html.Div(
+                [
+                    html.Div("Datasets", className="data-explorer-eyebrow"),
+                    html.H4("Select a dataset"),
+                    html.P(
+                        "Pick a registered dataset, then jump directly to the analysis view you need.",
+                        className="mb-0",
+                    ),
+                ],
+                className="data-explorer-sidebar-head",
+            ),
+            dbc.Button(
+                "Upload Dataset",
+                id="open-upload-modal",
+                color="primary",
+                className="w-100 mb-3",
+            ),
+            hidden_dataset_table(),
+            html.Div(id="dataset-card-list", className="dataset-card-list"),
+            html.Div(
+                [
+                    dbc.Button("Load", id="load-dataset-button", color="secondary", outline=True),
+                    dbc.Button("Metadata", id="view-metadata-button", color="secondary", outline=True),
+                    dbc.Button("Preprocess", id="run-preprocessing-button", color="success", outline=True),
+                    dbc.Button("Rerun", id="open-rerun-button", color="info", outline=True),
+                ],
+                className="dataset-action-grid",
+            ),
+            html.Div(id="registry-action-message", className="mt-3"),
+        ],
+    )
+
+
+def upload_dataset_modal():
+    return dbc.Modal(
+        [
+            dbc.ModalHeader(dbc.ModalTitle("Upload Raw Dataset")),
+            dbc.ModalBody(upload_raw_data_panel()),
+            dbc.ModalFooter(
+                dbc.Button(
+                    "Close",
+                    id="close-upload-modal",
+                    color="secondary",
+                    outline=True,
+                )
+            ),
+        ],
+        id="upload-modal",
+        size="xl",
+        scrollable=True,
+        is_open=False,
+        className="data-explorer-upload-modal",
+    )
+
+
+def build_lineage_flowchart(dataset_id):
+    dataset_id = str(dataset_id or "<dataset_id>")
+    nodes = [
+        ("Bronze", "raw tiles"),
+        ("Profile", "metadata + analytics"),
+        ("Silver", "conformed cloud"),
+        ("Gold", "blocks + scenes"),
+        ("Train/Infer", "model runs"),
+        ("Segment", "predictions + QA"),
+    ]
+
+    node_width = 130
+    node_height = 58
+    x_start = 22
+    x_gap = 26
+    y = 34
+    svg_parts = [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 142">',
+        '<rect x="0" y="0" width="960" height="142" rx="8" fill="#101419" stroke="#25303a"/>',
+        (
+            f'<text x="22" y="24" fill="#9ca8b4" font-size="12" '
+            f'font-weight="650">Dataset: {escape_svg_text(dataset_id)}</text>'
+        ),
+    ]
+
+    for index, (title, subtitle) in enumerate(nodes):
+        x = x_start + index * (node_width + x_gap)
+        if index:
+            line_x1 = x - x_gap + 4
+            line_x2 = x - 8
+            line_y = y + node_height / 2
+            svg_parts.append(
+                f'<line x1="{line_x1}" y1="{line_y}" x2="{line_x2}" y2="{line_y}" '
+                'stroke="#6f7b86" stroke-width="2"/>'
+            )
+            svg_parts.append(
+                f'<polygon points="{line_x2},{line_y} {line_x2 - 8},{line_y - 5} '
+                f'{line_x2 - 8},{line_y + 5}" fill="#6f7b86"/>'
+            )
+
+        fill, stroke = [
+            ("rgba(79, 179, 255, 0.12)", "rgba(79, 179, 255, 0.58)"),
+            ("rgba(61, 214, 181, 0.12)", "rgba(61, 214, 181, 0.58)"),
+            ("rgba(242, 184, 75, 0.12)", "rgba(242, 184, 75, 0.58)"),
+            ("rgba(185, 135, 255, 0.12)", "rgba(185, 135, 255, 0.58)"),
+        ][index % 4]
+
+        svg_parts.append(
+            f'<rect x="{x}" y="{y}" width="{node_width}" height="{node_height}" rx="8" '
+            f'fill="{fill}" stroke="{stroke}" stroke-width="1.5"/>'
+        )
+        svg_parts.append(
+            f'<text x="{x + 14}" y="{y + 23}" fill="#edf2f7" font-size="13" '
+            f'font-weight="800">{escape_svg_text(title)}</text>'
+        )
+        svg_parts.append(
+            f'<text x="{x + 14}" y="{y + 43}" fill="#9ca8b4" font-size="10" '
+            f'font-weight="600">{escape_svg_text(subtitle)}</text>'
+        )
+
+    svg_parts.append("</svg>")
+    svg_markup = "".join(svg_parts)
+
+    return html.Div(
+        [
+            html.Img(
+                src=f"data:image/svg+xml;charset=utf-8,{quote(svg_markup)}",
+                alt=f"Lineage flow for {dataset_id}",
+                className="lineage-svg",
+            ),
+            html.Div(
+                [
+                    html.Code(f"bronze_raw_data/{dataset_id}/"),
+                    html.Span(" -> "),
+                    html.Code(f"metadata_analytics/{dataset_id}/"),
+                    html.Span(" -> "),
+                    html.Code(f"silver_preprocessed_data/{dataset_id}/"),
+                    html.Span(" -> "),
+                    html.Code(f"gold_model_ready_data/{dataset_id}/"),
+                    html.Span(" -> "),
+                    html.Code(f"segmentation_outputs/{dataset_id}/"),
+                ],
+                className="lineage-path-row",
+            ),
+        ],
+        className="lineage-flowchart",
+    )
+
+
 # -------------------------------------------------------------------
 # Page Layout
 # -------------------------------------------------------------------
 
 layout = dbc.Container(
     fluid=True,
+    className="data-explorer-page",
     children=[
-        html.H2("Data Explorer"),
-        html.P(
-            "Upload, register, inspect, profile, visualize, and validate raw mobile LiDAR point cloud datasets."
-        ),
-
         dcc.Store(id="selected-dataset-id"),
         dcc.Store(id="upload-status-store"),
+        upload_dataset_modal(),
 
-        dbc.Row(
+        html.Div(
             [
-                dbc.Col(upload_raw_data_panel(), width=12),
+                html.Div(
+                    [
+                        html.Div("Data Explorer", className="data-explorer-eyebrow"),
+                        html.H2("Dataset analytics workspace"),
+                        html.P(
+                            "Inspect raw MLS/LiDAR datasets, metadata quality, semantic labels, spatial summaries, and Rerun recordings without scrolling through unrelated controls.",
+                            className="mb-0",
+                        ),
+                    ],
+                    className="data-explorer-title",
+                ),
             ],
-            className="mb-4",
+            className="data-explorer-head",
         ),
 
-        dbc.Row(
+        html.Div(
             [
-                dbc.Col(dataset_registry_panel(), width=12),
+                dataset_sidebar_panel(),
+                html.Section(
+                    dbc.Tabs(
+                        [
+                            dbc.Tab(
+                                label="Overview",
+                                tab_id="overview",
+                                children=[
+                                    html.Div(id="kpi-cards-container", className="mb-4"),
+                                    dbc.Row(
+                                        [
+                                            dbc.Col(preprocessing_readiness_panel(), md=6),
+                                            dbc.Col(model_compatibility_panel(), md=6),
+                                        ],
+                                        className="g-3",
+                                    ),
+                                ],
+                            ),
+                            dbc.Tab(
+                                label="Attributes",
+                                tab_id="attributes",
+                                children=[attribute_analytics_panel()],
+                            ),
+                            dbc.Tab(
+                                label="Labels",
+                                tab_id="labels",
+                                children=[label_distribution_panel()],
+                            ),
+                            dbc.Tab(
+                                label="Spatial",
+                                tab_id="spatial",
+                                children=[spatial_summary_panel()],
+                            ),
+                            dbc.Tab(
+                                label="Rerun",
+                                tab_id="rerun",
+                                children=[rerun_viewer_panel()],
+                            ),
+                            dbc.Tab(
+                                label="Lineage",
+                                tab_id="lineage",
+                                children=[dataset_lineage_panel()],
+                            ),
+                        ],
+                        id="data-explorer-tabs",
+                        active_tab="overview",
+                        className="data-explorer-tabs",
+                    ),
+                    className="data-explorer-main",
+                ),
             ],
-            className="mb-4",
-        ),
-
-        html.Hr(),
-
-        dbc.Row(
-            [
-                dbc.Col(html.Div(id="kpi-cards-container"), width=12),
-            ],
-            className="mb-4",
-        ),
-
-        dbc.Row(
-            [
-                dbc.Col(attribute_analytics_panel(), width=12),
-            ],
-            className="mb-4",
-        ),
-
-        dbc.Row(
-            [
-                dbc.Col(label_distribution_panel(), width=12),
-            ],
-            className="mb-4",
-        ),
-
-        dbc.Row(
-            [
-                dbc.Col(spatial_summary_panel(), width=12),
-            ],
-            className="mb-4",
-        ),
-
-        dbc.Row(
-            [
-                dbc.Col(rerun_viewer_panel(), width=12),
-            ],
-            className="mb-4",
-        ),
-
-        dbc.Row(
-            [
-                dbc.Col(preprocessing_readiness_panel(), width=6),
-                dbc.Col(model_compatibility_panel(), width=6),
-            ],
-            className="mb-4",
-        ),
-
-        dbc.Row(
-            [
-                dbc.Col(dataset_lineage_panel(), width=12),
-            ],
-            className="mb-4",
+            className="data-explorer-grid",
         ),
     ],
 )
+
+
+# -------------------------------------------------------------------
+# 0. Upload Modal
+# -------------------------------------------------------------------
+
+@callback(
+    Output("upload-modal", "is_open"),
+    Input("open-upload-modal", "n_clicks"),
+    Input("close-upload-modal", "n_clicks"),
+    State("upload-modal", "is_open"),
+)
+def toggle_upload_modal(open_clicks, close_clicks, is_open):
+    if dash.ctx.triggered_id in {"open-upload-modal", "close-upload-modal"}:
+        return not is_open
+    return is_open
 
 
 # -------------------------------------------------------------------
@@ -311,14 +585,17 @@ layout = dbc.Container(
 
 @callback(
     Output("dataset-registry-table", "data"),
+    Output("dataset-card-list", "children"),
     Input("upload-status-store", "data"),
+    Input("selected-dataset-id", "data"),
 )
-def refresh_dataset_registry(_):
+def refresh_dataset_registry(_, selected_dataset_id):
     try:
-        return list_registered_datasets()
+        rows = list_registered_datasets()
+        return rows, build_dataset_cards(rows, selected_dataset_id)
     except Exception as e:
         print(f"[REGISTRY ERROR] {e}")
-        return []
+        return [], dbc.Alert(f"Could not load registry: {e}", color="danger")
 
 
 # -------------------------------------------------------------------
@@ -327,19 +604,18 @@ def refresh_dataset_registry(_):
 
 @callback(
     Output("selected-dataset-id", "data"),
-    Input("dataset-registry-table", "selected_rows"),
-    State("dataset-registry-table", "data"),
+    Input({"type": "dataset-card", "dataset_id": ALL}, "n_clicks"),
 )
-def select_dataset(selected_rows, table_data):
-    if not selected_rows or not table_data:
-        return None
+def select_dataset(clicks):
+    if not clicks or not any(clicks):
+        return dash.no_update
 
-    row_index = selected_rows[0]
+    triggered_id = dash.ctx.triggered_id
 
-    if row_index is None or row_index >= len(table_data):
-        return None
+    if not triggered_id:
+        return dash.no_update
 
-    dataset_id = table_data[row_index].get("dataset_id")
+    dataset_id = triggered_id.get("dataset_id")
 
     print("=" * 80)
     print("[DATASET SELECTED]")
@@ -974,34 +1250,7 @@ def load_dataset_dashboard(dataset_id):
     readiness_data = metadata.get("readiness_checks", [])
     model_data = metadata.get("model_compatibility", [])
 
-    lineage = html.Pre(
-        f"""
-Raw Upload
-bronze_raw_data/{dataset_id}/source_files/tiles/
-bronze_raw_data/{dataset_id}/source_files/label_maps/
-        ↓
-Upload Manifests
-bronze_raw_data/{dataset_id}/manifests/upload_manifest.json
-bronze_raw_data/{dataset_id}/manifests/checksum_manifest.json
-        ↓
-Metadata Extraction
-metadata/datasets/{dataset_id}.json
-metadata_analytics/{dataset_id}/*.parquet
-        ↓
-Preprocessing
-gold_model_ready_data/{dataset_id}/prep_version/
-        ↓
-Training / Inference
-segmentation_outputs/{dataset_id}/prep_version/<model>/<run_id>/
-        ↓
-Clustering
-clustered_final_outputs/{dataset_id}/prep_version/<model>/<run_id>/
-        ↓
-Rerun Visualization
-data/rerun_outputs/{dataset_id}_<run_id>.rrd
-        """,
-        className="lineage-box",
-    )
+    lineage = build_lineage_flowchart(dataset_id)
 
     for fig in [
         attr_fig,
@@ -1038,29 +1287,20 @@ data/rerun_outputs/{dataset_id}_<run_id>.rrd
 # -------------------------------------------------------------------
 
 @callback(
-    Output("selected-dataset-id", "data", allow_duplicate=True),
     Output("registry-action-message", "children"),
     Input("load-dataset-button", "n_clicks"),
-    State("dataset-registry-table", "selected_rows"),
-    State("dataset-registry-table", "data"),
+    State("selected-dataset-id", "data"),
     prevent_initial_call=True,
 )
-def handle_load_dataset_button(n_clicks, selected_rows, table_data):
-    if not selected_rows or not table_data:
-        return dash.no_update, dbc.Alert(
-            "Please select a dataset row in the table first, then click Load Dataset.",
+def handle_load_dataset_button(n_clicks, dataset_id):
+    if not dataset_id:
+        return dbc.Alert(
+            "Please select a dataset card first.",
             color="warning",
         )
 
-    row_index = selected_rows[0]
-
-    if row_index is None or row_index >= len(table_data):
-        return dash.no_update, dbc.Alert("Invalid row selected.", color="danger")
-
-    dataset_id = table_data[row_index].get("dataset_id")
-
-    return dataset_id, dbc.Alert(
-        f"Dataset '{dataset_id}' loaded — scroll down to view KPIs and analytics.",
+    return dbc.Alert(
+        f"Dataset '{dataset_id}' loaded. Use the tabs to move through analytics.",
         color="success",
     )
 

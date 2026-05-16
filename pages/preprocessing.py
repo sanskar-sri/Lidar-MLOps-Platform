@@ -5,11 +5,13 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, dash_table, dcc, html
 
 from services.compute_nodes_service import (
+    COMPUTE_HEALTH_POLL_MS,
     build_compute_target_options,
     check_compute_nodes,
     resolve_airflow_queue,
 )
 from services.metadata_service import list_registered_datasets
+from services.mlflow_service import mlflow_browser_url
 from services.preprocessing_service import (
     AIRFLOW_API_BASE_URL,
     AIRFLOW_DAG_ID,
@@ -17,6 +19,7 @@ from services.preprocessing_service import (
     DEFAULT_TEST_SEGMENTS,
     DEFAULT_TRAIN_SEGMENTS,
     DEFAULT_VAL_SEGMENTS,
+    DEFAULT_MLFLOW_TRACKING_URI,
     build_airflow_conf,
     build_dataset_config,
     build_remote_command,
@@ -111,9 +114,39 @@ def _label_list_text(values):
     return ", ".join(str(value) for value in (values or []))
 
 
+_STORAGE_ROW_ORDER = [
+    ("bucket", "Bucket"),
+    ("airflow_raw_listing_prefix", "Bronze Listing Root"),
+    ("raw_tiles", "Bronze Raw Tiles"),
+    ("label_maps", "Bronze Label Maps"),
+    ("registry_metadata", "Registry Metadata"),
+    ("analytics", "Metadata Analytics"),
+    ("silver_output", "Silver Conformed Cloud"),
+    ("gold_output", "Gold Model-Ready Data"),
+    ("preprocessing_logs", "Run Logs"),
+    ("preprocessing_metadata", "Preprocessing Metadata"),
+]
+
+
+def _storage_table_rows(storage):
+    rows = [
+        {"role": label, "path": storage[key]}
+        for key, label in _STORAGE_ROW_ORDER
+        if storage.get(key)
+    ]
+    known_keys = {key for key, _label in _STORAGE_ROW_ORDER}
+    rows.extend(
+        {"role": key.replace("_", " ").title(), "path": value}
+        for key, value in storage.items()
+        if key not in known_keys
+    )
+    return rows
+
+
 def _compute_node_card(item):
     tone = item.get("tone", "warning")
     roles = ", ".join(item.get("roles") or [])
+    metrics = item.get("metrics") or []
     return html.Div(
         [
             html.Div(
@@ -125,6 +158,20 @@ def _compute_node_card(item):
             ),
             html.Div(item.get("state", ""), className=f"prep-node-state prep-node-state-{tone}"),
             html.Div(item.get("detail", ""), className="prep-node-detail"),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Div(metric.get("label", ""), className="prep-node-metric-label"),
+                            html.Div(metric.get("value", ""), className="prep-node-metric-value"),
+                            html.Div(metric.get("detail", ""), className="prep-node-metric-detail"),
+                        ],
+                        className="prep-node-metric",
+                    )
+                    for metric in metrics
+                ],
+                className="prep-node-metrics",
+            ) if metrics else None,
             html.Div(
                 [
                     html.Span(f"Queue: {item.get('airflow_queue') or item.get('id')}", className="prep-node-chip"),
@@ -141,14 +188,14 @@ layout = html.Div(
     className="prep-page",
     children=[
         dcc.Interval(id="preproc-dataset-refresh", interval=60000, n_intervals=0),
-        dcc.Interval(id="preproc-compute-health-refresh", interval=30000, n_intervals=0),
+        dcc.Interval(id="preproc-compute-health-refresh", interval=COMPUTE_HEALTH_POLL_MS, n_intervals=0),
 
         html.Div(
             [
-                html.Div("Airflow Remote Execution", className="prep-eyebrow"),
-                html.H2("Preprocessing Control"),
+                html.Div("Medallion Remote Execution", className="prep-eyebrow"),
+                html.H2("Preprocessing Medallion Control"),
                 html.P(
-                    "Trigger MLS preprocessing from this dashboard while the v9 Airflow package runs on the high-configuration workstation and writes tiered outputs back to B2."
+                    "Trigger the MLS v9 workflow from bronze raw B2 data through silver conformed clouds and gold model-ready training artifacts while the high-configuration workstation does the processing."
                 ),
             ],
             className="prep-page-head",
@@ -156,40 +203,45 @@ layout = html.Div(
 
         dbc.Row(
             [
-                _metric("Controller", "Dash only", "No local preprocessing on this system"),
-                _metric("Orchestrator", AIRFLOW_DAG_ID, "Airflow DAG activated by API payload"),
-                _metric("Bronze source", "raw tiles", "bronze_raw_data/<dataset>/source_files/tiles"),
-                _metric("Silver + Gold", "v9 data lake", "Clean cloud plus model-ready scenes and blocks"),
+                _metric("Controller", "Dash payload", "Creates Airflow conf; remote workers run the job"),
+                _metric("Bronze", "raw MLS tiles", "bronze_raw_data/<dataset>/source_files/tiles"),
+                _metric("Silver", "conformed cloud", "Voxelised, feature-rich, model-agnostic NPZ"),
+                _metric("Gold", "model-ready", "Blocks, Pointcept scenes, splits, and eval artifacts"),
             ],
             className="mb-2",
         ),
 
         dbc.Card(
             [
-                dbc.CardHeader(html.H4("1. Execution Flow")),
+                dbc.CardHeader(html.H4("1. Bronze to Silver to Gold Flow")),
                 dbc.CardBody(
                     [
                         html.Div(
                             [
                                 _flow_step(
-                                    "Bronze Input",
-                                    "Read raw tiles and label maps from the selected dataset prefix.",
+                                    "Bronze Raw Input",
+                                    "Stage .ply/.las/.laz tiles, label maps, and dataset config from the bronze prefixes.",
                                     "blue",
                                 ),
                                 _flow_step(
-                                    "Airflow Trigger",
-                                    "Send config to the remote DAG. This web app does not run the script locally.",
+                                    "Remote Airflow Run",
+                                    f"Send the payload to {AIRFLOW_DAG_ID}; the selected worker queue runs the v9 script.",
                                     "green",
                                 ),
                                 _flow_step(
-                                    "Remote v9 Script",
-                                    "Run preprocessing on the high-CPU/GPU workstation.",
+                                    "Silver Conformed Cloud",
+                                    "Write processed_cloud.npz with offsets, voxelised geometry, features, and labels.",
                                     "yellow",
                                 ),
                                 _flow_step(
-                                    "Tiered Output",
-                                    "Upload silver cloud, gold model data, logs, and metadata catalog entries.",
+                                    "Gold Model-Ready Data",
+                                    "Write PointNet++/RandLA blocks, Pointcept scenes, split files, and eval outputs.",
                                     "purple",
+                                ),
+                                _flow_step(
+                                    "Evidence and Catalog",
+                                    "Upload preprocessing logs, metadata.json, MLflow run records, and DVC context.",
+                                    "red",
                                 ),
                             ],
                             className="prep-flow",
@@ -206,7 +258,7 @@ layout = html.Div(
                 dbc.CardBody(
                     [
                         html.P(
-                            "Both remote systems should expose a health endpoint before Dash routes preprocessing or training work to them.",
+                            "The Windows workstation should expose a health endpoint before Dash routes preprocessing or training work to it.",
                             className="text-muted",
                         ),
                         html.Div(id="preproc-compute-health-grid", className="prep-node-grid"),
@@ -494,16 +546,115 @@ layout = html.Div(
             ]
         ),
 
+        dbc.Card(
+            [
+                dbc.CardHeader(html.H4("5. MLOps Tracking")),
+                dbc.CardBody(
+                    [
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        dbc.Label("MLflow Tracking URI"),
+                                        dbc.Input(
+                                            id="preproc-mlflow-tracking-uri",
+                                            value=DEFAULT_MLFLOW_TRACKING_URI,
+                                            placeholder="./mlruns or http://mlflow-host:5000",
+                                            persistence=True,
+                                            persistence_type="session",
+                                        ),
+                                        html.A(
+                                            dbc.Button(
+                                                "See Preprocessing Tracking",
+                                                id="preproc-open-mlflow-button",
+                                                color="info",
+                                                outline=True,
+                                                size="sm",
+                                                className="mt-2 w-100",
+                                            ),
+                                            id="preproc-open-mlflow-link",
+                                            href=mlflow_browser_url(DEFAULT_MLFLOW_TRACKING_URI),
+                                            target="_blank",
+                                            rel="noopener noreferrer",
+                                        ),
+                                    ],
+                                    md=4,
+                                ),
+                                dbc.Col(
+                                    [
+                                        dbc.Label("MLflow Experiment"),
+                                        dbc.Input(
+                                            id="preproc-mlflow-experiment",
+                                            value="mls-preprocessing",
+                                            persistence=True,
+                                            persistence_type="session",
+                                        ),
+                                    ],
+                                    md=4,
+                                ),
+                                dbc.Col(
+                                    [
+                                        dbc.Label("DVC Remote"),
+                                        dbc.Input(
+                                            id="preproc-dvc-remote",
+                                            value="b2remote",
+                                            persistence=True,
+                                            persistence_type="session",
+                                        ),
+                                    ],
+                                    md=4,
+                                ),
+                            ],
+                            className="mb-3",
+                        ),
+                        dbc.Row(
+                            [
+                                dbc.Col(
+                                    [
+                                        dbc.Label("MLflow Run Name"),
+                                        dbc.Input(
+                                            id="preproc-mlflow-run-name",
+                                            placeholder="Optional; defaults to dataset + run id",
+                                            persistence=True,
+                                            persistence_type="session",
+                                        ),
+                                    ],
+                                    md=6,
+                                ),
+                                dbc.Col(
+                                    [
+                                        dbc.Label("Tracking Options"),
+                                        dbc.Checklist(
+                                            id="preproc-mlops-flags",
+                                            options=[
+                                                {"label": "Log small MLflow artifacts", "value": "log_artifacts"},
+                                                {"label": "Disable MLflow", "value": "disable_mlflow"},
+                                            ],
+                                            value=["log_artifacts"],
+                                            inline=True,
+                                            switch=True,
+                                        ),
+                                    ],
+                                    md=6,
+                                ),
+                            ]
+                        ),
+                    ]
+                ),
+            ],
+            className="mb-4",
+        ),
+
         dbc.Row(
             [
                 dbc.Col(
                     dbc.Card(
                         [
-                            dbc.CardHeader(html.H4("5. Bucket Contract")),
+                            dbc.CardHeader(html.H4("6. Bucket Contract")),
                             dbc.CardBody(
                                 [
                                     html.P(
-                                        "These are the exact B2 folders the Airflow job should read from and write to.",
+                                        "These are the exact B2 folders in the medallion contract, ordered from bronze inputs to silver/gold outputs and run evidence.",
                                         className="text-muted",
                                     ),
                                     dash_table.DataTable(
@@ -527,7 +678,7 @@ layout = html.Div(
                 dbc.Col(
                     dbc.Card(
                         [
-                            dbc.CardHeader(html.H4("6. Script Source")),
+                            dbc.CardHeader(html.H4("7. Script Source")),
                             dbc.CardBody(
                                 [
                                     html.P(
@@ -557,13 +708,13 @@ layout = html.Div(
 
         dbc.Card(
             [
-                dbc.CardHeader(html.H4("7. Airflow Payload Preview")),
+                dbc.CardHeader(html.H4("8. Airflow Payload Preview")),
                 dbc.CardBody(
                     [
                         dbc.Alert(
                             [
                                 html.Strong("Execution rule: "),
-                                "this page only creates and sends the Airflow trigger. The v9 package must run on the remote high-configuration system and upload results to the silver, gold, logs, and metadata prefixes.",
+                                "this page creates and sends the Airflow trigger. The v9 package stages bronze inputs on the remote high-configuration system, then uploads silver, gold, logs, and metadata outputs.",
                             ],
                             color="info",
                         ),
@@ -681,8 +832,14 @@ def _build_conf_from_values(
     ptv3_scene_length,
     num_workers,
     feature_flags,
+    mlflow_tracking_uri,
+    mlflow_experiment,
+    mlflow_run_name,
+    dvc_remote,
+    mlops_flags,
 ):
     flags = set(feature_flags or [])
+    mlops = set(mlops_flags or [])
     airflow_queue = resolve_airflow_queue(execution_target)
     return build_airflow_conf(
         dataset_id=dataset_id,
@@ -716,6 +873,12 @@ def _build_conf_from_values(
         ignore_labels=ignore_labels,
         execution_target=execution_target,
         airflow_queue=airflow_queue,
+        mlflow_tracking_uri=mlflow_tracking_uri,
+        mlflow_experiment=mlflow_experiment,
+        mlflow_run_name=mlflow_run_name,
+        dvc_remote=dvc_remote,
+        disable_mlflow="disable_mlflow" in mlops,
+        mlflow_log_artifacts="log_artifacts" in mlops,
     )
 
 
@@ -729,12 +892,22 @@ def refresh_compute_health(_):
     return [_compute_node_card(item) for item in statuses], build_compute_target_options()
 
 
+@callback(
+    Output("preproc-open-mlflow-link", "href"),
+    Output("preproc-open-mlflow-button", "disabled"),
+    Input("preproc-mlflow-tracking-uri", "value"),
+)
+def update_preprocessing_mlflow_link(uri):
+    href = mlflow_browser_url(uri)
+    return href, href == "#"
+
+
 def _compute_target_blocker(execution_target):
     statuses = check_compute_nodes()
     if execution_target == "any_gpu_worker":
         if any(item.get("tone") == "connected" for item in statuses):
             return None
-        return "No compute node is online. Start the health agent on System 1 or System 2 before triggering Airflow."
+        return "No compute node is online. Start the health agent on the Windows workstation before triggering Airflow."
 
     for item in statuses:
         if item.get("id") == execution_target:
@@ -793,6 +966,11 @@ def _segment_split_blocker(mode, num_segments, train_segments, val_segments, tes
     Input("preproc-ptv3-length", "value"),
     Input("preproc-workers", "value"),
     Input("preproc-feature-flags", "value"),
+    Input("preproc-mlflow-tracking-uri", "value"),
+    Input("preproc-mlflow-experiment", "value"),
+    Input("preproc-mlflow-run-name", "value"),
+    Input("preproc-dvc-remote", "value"),
+    Input("preproc-mlops-flags", "value"),
 )
 def update_preprocessing_preview(*values):
     dataset_id = values[0] or "<dataset_id>"
@@ -800,10 +978,7 @@ def update_preprocessing_preview(*values):
     storage = conf["storage"] if values[0] else build_storage_contract(dataset_id, values[7] or "prep_v001")
     script = conf["script"]
 
-    storage_rows = [
-        {"role": key.replace("_", " ").title(), "path": value}
-        for key, value in storage.items()
-    ]
+    storage_rows = _storage_table_rows(storage)
     script_rows = [
         {"field": "DAG", "value": conf["dag_id"]},
         {"field": "Run ID", "value": conf["run_id"]},
@@ -812,6 +987,13 @@ def update_preprocessing_preview(*values):
         {"field": "Local reference", "value": script["local_reference_path"]},
         {"field": "Remote Airflow path", "value": script["remote_execution_path"]},
         {"field": "Dataset config", "value": conf["script_args"]["custom_dataset"]},
+        {"field": "MLflow URI", "value": conf["script_args"]["mlflow_tracking_uri"]},
+        {"field": "MLflow Experiment", "value": conf["script_args"]["mlflow_experiment"]},
+        {"field": "DVC Remote", "value": conf["script_args"]["dvc_remote"]},
+        {
+            "field": "MLflow Artifacts",
+            "value": str(not conf["script_args"]["mlflow_no_artifacts"]),
+        },
         {"field": "Exists on controller", "value": str(script["exists_on_controller"])},
         {"field": "Last modified", "value": script["last_modified"]},
     ]
@@ -856,6 +1038,11 @@ def update_preprocessing_preview(*values):
     State("preproc-ptv3-length", "value"),
     State("preproc-workers", "value"),
     State("preproc-feature-flags", "value"),
+    State("preproc-mlflow-tracking-uri", "value"),
+    State("preproc-mlflow-experiment", "value"),
+    State("preproc-mlflow-run-name", "value"),
+    State("preproc-dvc-remote", "value"),
+    State("preproc-mlops-flags", "value"),
     prevent_initial_call=True,
 )
 def handle_preprocessing_action(save_clicks, trigger_clicks, *values):
