@@ -84,7 +84,7 @@ _STAGES = [
         "desc": "Persist segmentation outputs, clustered_final_outputs, and Rerun views for spatial validation.",
         "color": "#bde7ff",
         "status": "pending",
-        "href": "/data-explorer",
+        "href": "/postprocessing",
     },
     {
         "num": "Stage 08",
@@ -461,6 +461,7 @@ layout = html.Div(
                         dcc.Link("Data Explorer", href="/data-explorer", className="lp-nav-link"),
                         dcc.Link("Preprocessing", href="/preprocessing", className="lp-nav-link"),
                         dcc.Link("Training", href="/training", className="lp-nav-link"),
+                        dcc.Link("Postprocessing", href="/postprocessing", className="lp-nav-link"),
                         dcc.Link("Control", href="/control-panel", className="lp-nav-link"),
                     ],
                     className="lp-nav",

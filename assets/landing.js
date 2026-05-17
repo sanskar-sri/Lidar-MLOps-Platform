@@ -1,12 +1,14 @@
 /*
  * assets/landing.js
- * Dash loads this globally, so every initializer checks for home-page elements
- * before doing any work.
+ * Dash loads this globally, so every initializer checks for page-specific
+ * canvas and status elements before doing any work.
  */
 
 (function () {
     function initLandingCanvas() {
-        const cv = document.getElementById('lp-cv');
+        const cv = document.querySelector(
+            '#lp-cv, #data-explorer-cv, #preprocessing-cv, #training-cv, #control-cv, #postprocessing-cv'
+        );
         if (!cv) return false;
         if (cv.dataset.lpStarted === '1') return true;
         cv.dataset.lpStarted = '1';
@@ -27,13 +29,17 @@
         let raf = null;
 
         function resize() {
-            width = parent ? parent.clientWidth : cv.offsetWidth;
-            height = parent ? parent.clientHeight : cv.offsetHeight;
+            const w = parent ? parent.clientWidth : cv.offsetWidth;
+            const h = parent ? parent.clientHeight : cv.offsetHeight;
+            if (w === 0 || h === 0) return false;
+            width = w;
+            height = h;
             cv.width = Math.max(1, Math.floor(width * window.devicePixelRatio));
             cv.height = Math.max(1, Math.floor(height * window.devicePixelRatio));
             cv.style.width = width + 'px';
             cv.style.height = height + 'px';
             ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+            return true;
         }
 
         function makeParticles() {
@@ -321,17 +327,25 @@
             mouseY = -9999;
         }
 
-        resize();
-        makeParticles();
-        makePointCloud();
-        window.addEventListener('resize', function () {
-            resize();
+        function start() {
+            if (!document.body.contains(cv)) return;
+            if (!resize()) {
+                requestAnimationFrame(start);
+                return;
+            }
             makeParticles();
             makePointCloud();
-        });
-        cv.addEventListener('mousemove', pointerMove);
-        cv.addEventListener('mouseleave', pointerLeave);
-        animate();
+            window.addEventListener('resize', function () {
+                resize();
+                makeParticles();
+                makePointCloud();
+            });
+            cv.addEventListener('mousemove', pointerMove);
+            cv.addEventListener('mouseleave', pointerLeave);
+            animate();
+        }
+
+        start();
         return true;
     }
 

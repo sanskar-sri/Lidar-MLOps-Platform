@@ -391,3 +391,32 @@ def get_backend_status_cards():
         _system_card(remote),
         *_compute_node_cards(),
     ]
+
+
+def get_pipeline_task_statuses(dag_run_id: str) -> list:
+    """Return task instance list for an mls_preprocessing_v9 DAG run."""
+    from services.preprocessing_service import AIRFLOW_DAG_ID
+    try:
+        payload = _get_json(
+            f"/api/v1/dags/{parse.quote(AIRFLOW_DAG_ID, safe='')}"
+            f"/dagRuns/{parse.quote(dag_run_id, safe='')}/taskInstances",
+            timeout=10,
+        )
+        return payload.get("task_instances") or []
+    except Exception:
+        return []
+
+
+def get_dag_run_state(dag_run_id: str) -> str:
+    """Return the overall state (queued/running/success/failed) of a DAG run."""
+    from services.preprocessing_service import AIRFLOW_DAG_ID
+    try:
+        payload = _get_json(
+            f"/api/v1/dags/{parse.quote(AIRFLOW_DAG_ID, safe='')}"
+            f"/dagRuns/{parse.quote(dag_run_id, safe='')}",
+            timeout=10,
+        )
+        return payload.get("state") or "unknown"
+    except Exception:
+        return "unknown"
+
