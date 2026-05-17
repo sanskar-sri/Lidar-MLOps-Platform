@@ -40,19 +40,35 @@ def _sparkline(percent):
     )
 
 
+def _metric_band(percent):
+    if percent >= 90:
+        return "offline"
+    if percent >= 75:
+        return "warning"
+    return "connected"
+
+
 def _metric_tile(metric):
     label = metric.get("label", "")
     value = metric.get("value", "")
     detail = metric.get("detail", "")
     percent = _extract_percent(value, detail)
-    band = "warning" if percent >= 75 else "connected"
+    band = _metric_band(percent)
 
     return html.Div(
         [
-            html.Div(label, className="control-metric-label"),
-            html.Div(value, className="control-metric-value"),
+            html.Div(
+                [
+                    html.Div(label, className="control-metric-label"),
+                    html.Div(value, className="control-metric-value"),
+                ],
+                className="control-metric-head",
+            ),
+            html.Div(
+                html.Span(style={"width": f"{percent:.1f}%"}),
+                className=f"control-gauge control-gauge-{band}",
+            ),
             html.Div(detail, className="control-metric-detail"),
-            _sparkline(percent),
         ],
         className=f"control-metric control-metric-{band}",
         style={"--metric-pct": f"{percent:.1f}%"},
@@ -178,6 +194,46 @@ def _summary_cards(nodes, mlflow):
     ]
 
 
+def _ops_nav(active):
+    links = [
+        ("Home", "/"),
+        ("Data Explorer", "/data-explorer"),
+        ("Preprocessing", "/preprocessing"),
+        ("Training", "/training"),
+        ("Postprocessing", "/postprocessing"),
+        ("Control", "/control-panel"),
+    ]
+    return html.Nav(
+        [
+            dcc.Link(
+                label,
+                href=href,
+                className="ops-nav-link ops-nav-link-active" if label == active else "ops-nav-link",
+            )
+            for label, href in links
+        ],
+        className="ops-nav",
+    )
+
+
+def _relative_age(iso_value):
+    if not iso_value:
+        return "waiting for first refresh"
+    try:
+        checked_at = datetime.fromisoformat(str(iso_value).replace("Z", "+00:00"))
+    except ValueError:
+        return "refreshed just now"
+    seconds = max(0, int((datetime.now(timezone.utc) - checked_at).total_seconds()))
+    if seconds < 5:
+        return "refreshed just now"
+    if seconds < 60:
+        return f"refreshed {seconds}s ago"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"refreshed {minutes}m ago"
+    return f"refreshed {minutes // 60}h ago"
+
+
 def _uri_cell(label, value, detail, link=False):
     value = value or "n/a"
     href = value if link and str(value).startswith(("http://", "https://")) else None
@@ -233,19 +289,44 @@ def _mlflow_card(item):
 
 
 layout = html.Div(
-    className="control-page",
+    className="control-page ops-page",
     children=[
         dcc.Interval(
             id="control-panel-refresh",
             interval=COMPUTE_HEALTH_POLL_MS,
             n_intervals=0,
         ),
-        html.Div(
+        dcc.Interval(id="control-panel-age-tick", interval=1000, n_intervals=0),
+        dcc.Store(id="control-panel-last-refresh-store"),
+
+        html.Header(
             [
                 html.Div(
                     [
-                        html.Div("Live Operations", className="control-eyebrow"),
-                        html.H2("Compute Control Panel"),
+                        html.Div(className="ops-brand-mark"),
+                        html.Div(
+                            [
+                                html.Div("LiDAR Platform", className="ops-brand-title"),
+                                html.Div("Remote workers, routing, and observability", className="ops-brand-subtitle"),
+                            ]
+                        ),
+                    ],
+                    className="ops-brand",
+                ),
+                _ops_nav("Control"),
+                html.Div("Operations Console", className="ops-live-pill"),
+            ],
+            className="ops-topbar",
+        ),
+
+        html.Div(
+            [
+                html.Canvas(id="control-cv", className="ops-hero-canvas"),
+                html.Div(className="ops-hero-shade"),
+                html.Div(
+                    [
+                        html.Div("Live Operations", className="ops-eyebrow"),
+                        html.H1(["Compute", html.Br(), html.Em("Control Panel")]),
                         html.P("Remote workstation health, routing readiness, and tracking service status for MLS runs."),
                     ],
                     className="control-hero-copy",
@@ -263,7 +344,7 @@ layout = html.Div(
                     className="control-hero-actions",
                 ),
             ],
-            className="control-hero",
+            className="control-hero ops-hero ops-hero-control",
         ),
         html.Div(id="control-panel-summary-grid", className="control-summary-grid"),
         html.Div(
@@ -317,8 +398,8 @@ layout = html.Div(
     Output("control-panel-summary-grid", "children"),
     Output("control-panel-node-grid", "children"),
     Output("control-panel-mlflow", "children"),
-    Output("control-panel-refreshed-at", "children"),
     Output("control-panel-node-badge", "children"),
+    Output("control-panel-last-refresh-store", "data"),
     Input("control-panel-refresh", "n_intervals"),
     Input("control-panel-refresh-button", "n_clicks"),
 )
@@ -333,6 +414,15 @@ def refresh_control_panel(_interval_ticks, _manual_clicks):
         _summary_cards(nodes, mlflow),
         [_node_card(item) for item in nodes],
         [_mlflow_card(mlflow)],
-        f"Dash refreshed {refreshed_at}",
         f"{online_nodes}/{total_nodes} online",
+        refreshed_at,
     )
+
+
+@callback(
+    Output("control-panel-refreshed-at", "children"),
+    Input("control-panel-last-refresh-store", "data"),
+    Input("control-panel-age-tick", "n_intervals"),
+)
+def update_refresh_age(last_refresh, _ticks):
+    return _relative_age(last_refresh)

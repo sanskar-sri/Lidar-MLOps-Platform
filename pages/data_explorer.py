@@ -237,6 +237,67 @@ def format_compact_number(value):
     return str(int(number))
 
 
+def data_explorer_stat_items():
+    try:
+        rows = list_registered_datasets()
+    except Exception as exc:
+        print(f"[DATA EXPLORER STAT ERROR] {exc}")
+        rows = []
+
+    total_files = sum(int(row.get("total_files") or 0) for row in rows)
+    total_points = sum(float(row.get("total_points") or 0) for row in rows)
+    label_ready = sum(
+        1
+        for row in rows
+        if str(row.get("labels") or "").strip().lower() in {"available", "ready", "yes"}
+    )
+
+    return [
+        {
+            "label": "Datasets",
+            "value": len(rows),
+            "display": f"{len(rows):,}",
+            "kind": "number",
+        },
+        {
+            "label": "Files Profiled",
+            "value": total_files,
+            "display": f"{total_files:,}",
+            "kind": "number",
+        },
+        {
+            "label": "Points Indexed",
+            "value": int(total_points),
+            "display": format_compact_number(total_points),
+            "kind": "number",
+        },
+        {
+            "label": "Label Ready",
+            "value": label_ready,
+            "display": f"{label_ready:,}",
+            "kind": "number",
+        },
+    ]
+
+
+def data_explorer_stat_tile(item):
+    attrs = {
+        "data-stat-kind": item["kind"],
+        "data-stat-value": str(item["value"]),
+    }
+    return html.Div(
+        [
+            html.Div(item["display"], className="de-stat-value lp-stat-value", **attrs),
+            html.Div(item["label"], className="de-stat-label"),
+        ],
+        className="de-stat",
+    )
+
+
+def data_explorer_stats_strip():
+    return [data_explorer_stat_tile(item) for item in data_explorer_stat_items()]
+
+
 def build_dataset_cards(rows, selected_dataset_id=None):
     if not rows:
         return dbc.Alert(
@@ -485,82 +546,172 @@ layout = dbc.Container(
     children=[
         dcc.Store(id="selected-dataset-id"),
         dcc.Store(id="upload-status-store"),
+        dcc.Interval(id="data-explorer-stats-refresh", interval=60000, n_intervals=0),
         upload_dataset_modal(),
 
         html.Div(
-            [
+            className="de-topbar",
+            children=[
                 html.Div(
-                    [
-                        html.Div("Data Explorer", className="data-explorer-eyebrow"),
-                        html.H2("Dataset analytics workspace"),
-                        html.P(
-                            "Inspect raw MLS/LiDAR datasets, metadata quality, semantic labels, spatial summaries, and Rerun recordings without scrolling through unrelated controls.",
-                            className="mb-0",
+                    className="de-brand",
+                    children=[
+                        html.Span(className="de-brand-grid"),
+                        html.Div(
+                            [
+                                html.Div("LiDAR Platform", className="de-brand-title"),
+                                html.Div(
+                                    "Data Explorer - Metadata Analytics - Rerun",
+                                    className="de-brand-subtitle",
+                                ),
+                            ],
+                            className="de-brand-copy",
                         ),
                     ],
-                    className="data-explorer-title",
+                ),
+                html.Div(
+                    [
+                        dcc.Link("Home", href="/", className="de-nav-link"),
+                        dcc.Link("Data Explorer", href="/data-explorer", className="de-nav-link de-nav-link-active"),
+                        dcc.Link("Preprocessing", href="/preprocessing", className="de-nav-link"),
+                        dcc.Link("Training", href="/training", className="de-nav-link"),
+                        dcc.Link("Postprocessing", href="/postprocessing", className="de-nav-link"),
+                        dcc.Link("Control", href="/control-panel", className="de-nav-link"),
+                    ],
+                    className="de-nav",
+                ),
+                html.Div(
+                    [html.Span(className="de-live-dot"), "Analytics Ready"],
+                    className="de-live-pill",
                 ),
             ],
-            className="data-explorer-head",
+        ),
+
+        html.Section(
+            className="de-hero",
+            children=[
+                html.Canvas(
+                    id="data-explorer-cv",
+                    **{"aria-label": "Animated LiDAR analytics field"},
+                ),
+                html.Div(
+                    [
+                        html.Div("MLS Metadata - Semantic Labels - 3D QA", className="de-eyebrow"),
+                        html.H1(
+                            ["Dataset Analytics", html.Br(), html.Em("Workspace")],
+                            className="de-hero-title",
+                        ),
+                        html.P(
+                            "Inspect point-cloud registry health, semantic labels, spatial summaries, model readiness, and Rerun records in a focused visual workspace.",
+                            className="de-hero-copy",
+                        ),
+                        html.Div(
+                            [
+                                html.A("Open Workspace ->", href="#data-explorer-workspace", className="de-primary-cta"),
+                                dcc.Link("Start Preprocessing", href="/preprocessing", className="de-secondary-cta"),
+                            ],
+                            className="de-hero-actions",
+                        ),
+                    ],
+                    className="de-hero-content",
+                ),
+            ],
         ),
 
         html.Div(
-            [
-                dataset_sidebar_panel(),
-                html.Section(
-                    dbc.Tabs(
-                        [
-                            dbc.Tab(
-                                label="Overview",
-                                tab_id="overview",
-                                children=[
-                                    html.Div(id="kpi-cards-container", className="mb-4"),
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(preprocessing_readiness_panel(), md=6),
-                                            dbc.Col(model_compatibility_panel(), md=6),
+            data_explorer_stats_strip(),
+            id="data-explorer-live-stats",
+            className="de-live-stats",
+        ),
+
+        html.Section(
+            id="data-explorer-workspace",
+            className="data-explorer-workspace",
+            children=[
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Div("Data Explorer", className="data-explorer-eyebrow"),
+                                html.H2("Dataset analytics workspace"),
+                                html.P(
+                                    "Select a registered dataset, then move through KPIs, attributes, labels, spatial summaries, lineage, and Rerun previews.",
+                                    className="mb-0",
+                                ),
+                            ],
+                            className="data-explorer-title",
+                        ),
+                    ],
+                    className="data-explorer-head",
+                ),
+
+                html.Div(
+                    [
+                        dataset_sidebar_panel(),
+                        html.Section(
+                            dbc.Tabs(
+                                [
+                                    dbc.Tab(
+                                        label="Overview",
+                                        tab_id="overview",
+                                        children=[
+                                            html.Div(id="kpi-cards-container", className="mb-4"),
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(preprocessing_readiness_panel(), md=6),
+                                                    dbc.Col(model_compatibility_panel(), md=6),
+                                                ],
+                                                className="g-3",
+                                            ),
                                         ],
-                                        className="g-3",
+                                    ),
+                                    dbc.Tab(
+                                        label="Attributes",
+                                        tab_id="attributes",
+                                        children=[attribute_analytics_panel()],
+                                    ),
+                                    dbc.Tab(
+                                        label="Labels",
+                                        tab_id="labels",
+                                        children=[label_distribution_panel()],
+                                    ),
+                                    dbc.Tab(
+                                        label="Spatial",
+                                        tab_id="spatial",
+                                        children=[spatial_summary_panel()],
+                                    ),
+                                    dbc.Tab(
+                                        label="Rerun",
+                                        tab_id="rerun",
+                                        children=[rerun_viewer_panel()],
+                                    ),
+                                    dbc.Tab(
+                                        label="Lineage",
+                                        tab_id="lineage",
+                                        children=[dataset_lineage_panel()],
                                     ),
                                 ],
+                                id="data-explorer-tabs",
+                                active_tab="overview",
+                                className="data-explorer-tabs",
                             ),
-                            dbc.Tab(
-                                label="Attributes",
-                                tab_id="attributes",
-                                children=[attribute_analytics_panel()],
-                            ),
-                            dbc.Tab(
-                                label="Labels",
-                                tab_id="labels",
-                                children=[label_distribution_panel()],
-                            ),
-                            dbc.Tab(
-                                label="Spatial",
-                                tab_id="spatial",
-                                children=[spatial_summary_panel()],
-                            ),
-                            dbc.Tab(
-                                label="Rerun",
-                                tab_id="rerun",
-                                children=[rerun_viewer_panel()],
-                            ),
-                            dbc.Tab(
-                                label="Lineage",
-                                tab_id="lineage",
-                                children=[dataset_lineage_panel()],
-                            ),
-                        ],
-                        id="data-explorer-tabs",
-                        active_tab="overview",
-                        className="data-explorer-tabs",
-                    ),
-                    className="data-explorer-main",
+                            className="data-explorer-main",
+                        ),
+                    ],
+                    className="data-explorer-grid",
                 ),
             ],
-            className="data-explorer-grid",
         ),
     ],
 )
+
+
+@callback(
+    Output("data-explorer-live-stats", "children"),
+    Input("data-explorer-stats-refresh", "n_intervals"),
+    Input("upload-status-store", "data"),
+)
+def refresh_data_explorer_stats(_n_intervals, _upload_status):
+    return data_explorer_stats_strip()
 
 
 # -------------------------------------------------------------------

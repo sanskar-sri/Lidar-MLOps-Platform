@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import dash
 import dash_bootstrap_components as dbc
@@ -17,6 +18,7 @@ from services.training_service import (
     AIRFLOW_API_BASE_URL,
     AIRFLOW_TRAINING_DAG_ID,
     DEFAULT_TRAINING_MLFLOW_TRACKING_URI,
+    TRAINING_RUN_REQUEST_DIR,
     build_training_command,
     build_training_conf,
     persist_training_request,
@@ -28,9 +30,9 @@ dash.register_page(__name__, path="/training", name="Training")
 
 
 MODEL_OPTIONS = [
-    {"label": "PointNet++ SSG", "value": "pointnet2"},
-    {"label": "PointNet++ MSG", "value": "pointnet2_msg"},
-    {"label": "RandLA-Net", "value": "randlanet"},
+    {"label": "PointNet++ SSG  |  stable baseline", "value": "pointnet2"},
+    {"label": "PointNet++ MSG  |  multi-scale geometry", "value": "pointnet2_msg"},
+    {"label": "RandLA-Net  |  efficient large scenes", "value": "randlanet"},
 ]
 
 
@@ -137,7 +139,61 @@ def _metric(label, value, sub):
     )
 
 
-layout = html.Div(
+def _ops_nav(active):
+    links = [
+        ("Home", "/"),
+        ("Data Explorer", "/data-explorer"),
+        ("Preprocessing", "/preprocessing"),
+        ("Training", "/training"),
+        ("Postprocessing", "/postprocessing"),
+        ("Control", "/control-panel"),
+    ]
+    return html.Nav(
+        [
+            dcc.Link(
+                label,
+                href=href,
+                className="ops-nav-link ops-nav-link-active" if label == active else "ops-nav-link",
+            )
+            for label, href in links
+        ],
+        className="ops-nav",
+    )
+
+
+def _hero_metric(label, value):
+    return html.Div(
+        [html.Div(value, className="ops-hero-metric-value"), html.Div(label, className="ops-hero-metric-label")],
+        className="ops-hero-metric",
+    )
+
+
+def _training_history_rows(limit=8):
+    root = Path(TRAINING_RUN_REQUEST_DIR)
+    if not root.exists():
+        return []
+
+    rows = []
+    for path in sorted(root.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        conf = payload.get("conf") or {}
+        rows.append(
+            {
+                "created_at": payload.get("created_at") or "n/a",
+                "run_id": payload.get("dag_run_id") or conf.get("run_id") or path.stem,
+                "dataset": conf.get("dataset_id") or "n/a",
+                "model": conf.get("model_type") or "n/a",
+                "queue": conf.get("airflow_queue") or "n/a",
+                "epochs": (conf.get("script_args") or {}).get("num_epochs", "n/a"),
+            }
+        )
+    return rows
+
+
+_legacy_layout = html.Div(
     className="prep-page",
     children=[
         dcc.Interval(id="training-dataset-refresh", interval=60000, n_intervals=0),
@@ -457,6 +513,268 @@ layout = html.Div(
 )
 
 
+layout = html.Div(
+    className="prep-page training-page ops-page",
+    children=[
+        dcc.Interval(id="training-dataset-refresh", interval=60000, n_intervals=0),
+        dcc.Interval(id="training-compute-health-refresh", interval=COMPUTE_HEALTH_POLL_MS, n_intervals=0),
+        dcc.Interval(id="training-history-refresh", interval=60000, n_intervals=0),
+
+        html.Header(
+            [
+                html.Div(
+                    [
+                        html.Div(className="ops-brand-mark"),
+                        html.Div(
+                            [
+                                html.Div("LiDAR Platform", className="ops-brand-title"),
+                                html.Div("Gold data to segmentation model runs", className="ops-brand-subtitle"),
+                            ]
+                        ),
+                    ],
+                    className="ops-brand",
+                ),
+                _ops_nav("Training"),
+                html.Div("GPU Routing", className="ops-live-pill"),
+            ],
+            className="ops-topbar",
+        ),
+
+        html.Section(
+            [
+                html.Canvas(id="training-cv", className="ops-hero-canvas"),
+                html.Div(className="ops-hero-shade"),
+                html.Div(
+                    [
+                        html.Div("Remote Training Execution", className="ops-eyebrow"),
+                        html.H1(["Training", html.Br(), html.Em("Control Room")]),
+                        html.P(
+                            "Pick a model like an operator, route the GPU job to the right worker, and keep a visible record of every training payload created by Dash."
+                        ),
+                        html.Div(
+                            [
+                                _hero_metric("Models", "3"),
+                                _hero_metric("DAG", AIRFLOW_TRAINING_DAG_ID),
+                                _hero_metric("Input", "Gold blocks"),
+                            ],
+                            className="ops-hero-metrics",
+                        ),
+                    ],
+                    className="ops-hero-copy",
+                ),
+            ],
+            className="ops-hero ops-hero-training",
+        ),
+
+        html.Main(
+            [
+                html.Div(
+                    [
+                        html.Section(
+                            [
+                                html.Div(
+                                    [
+                                        html.Div("Model Selection", className="ops-section-kicker"),
+                                        html.H2("Dataset and Architecture"),
+                                        html.P("The model is now a visual selector, so the choice reads like an operational decision rather than a form value."),
+                                    ],
+                                    className="ops-section-head",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                dbc.Label("Registered Dataset"),
+                                                dcc.Dropdown(
+                                                    id="training-dataset-dropdown",
+                                                    options=_dataset_options(),
+                                                    placeholder="Select a dataset from the registry",
+                                                    clearable=True,
+                                                ),
+                                            ],
+                                            className="ops-field ops-field-wide",
+                                        ),
+                                        html.Div([dbc.Label("Dataset ID"), dbc.Input(id="training-dataset-id", placeholder="paris-lille-id-1", persistence=True, persistence_type="session")], className="ops-field"),
+                                        html.Div([dbc.Label("Dataset Name"), dbc.Input(id="training-dataset-name", placeholder="Paris-Lille-3D", persistence=True, persistence_type="session")], className="ops-field"),
+                                        html.Div([dbc.Label("Preprocessing Version"), dbc.Input(id="training-prep-version", value="prep_v001", persistence=True, persistence_type="session")], className="ops-field"),
+                                    ],
+                                    className="ops-field-grid",
+                                ),
+                                html.Div(
+                                    [
+                                        dbc.Label("Model"),
+                                        dcc.RadioItems(
+                                            id="training-model-type",
+                                            options=MODEL_OPTIONS,
+                                            value="pointnet2",
+                                            className="training-model-selector",
+                                            inputClassName="training-model-radio",
+                                            labelClassName="training-model-option",
+                                            persistence=True,
+                                            persistence_type="session",
+                                        ),
+                                    ],
+                                    className="ops-model-block",
+                                ),
+                            ],
+                            className="ops-panel ops-panel-primary",
+                        ),
+
+                        html.Section(
+                            [
+                                html.Div(
+                                    [
+                                        html.Div("Worker Preflight", className="ops-section-kicker"),
+                                        html.H2("Compute Health"),
+                                        html.P("Training remains blocked unless the selected remote worker is online."),
+                                    ],
+                                    className="ops-section-head",
+                                ),
+                                html.Div(id="training-compute-health-grid", className="prep-node-grid ops-node-grid"),
+                            ],
+                            className="ops-panel",
+                        ),
+
+                        html.Section(
+                            [
+                                html.Div(
+                                    [
+                                        html.Div("Run Parameters", className="ops-section-kicker"),
+                                        html.H2("Training Run"),
+                                        html.P("GPU routing, run identity, and learning parameters stay compact and scannable."),
+                                    ],
+                                    className="ops-section-head",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                dbc.Label("Execution Target"),
+                                                dcc.Dropdown(
+                                                    id="training-execution-target",
+                                                    options=build_compute_target_options(),
+                                                    value="any_gpu_worker",
+                                                    clearable=False,
+                                                    persistence=True,
+                                                    persistence_type="session",
+                                                ),
+                                            ],
+                                            className="ops-field",
+                                        ),
+                                        html.Div([dbc.Label("Run ID"), dbc.Input(id="training-run-id", placeholder="Leave blank for UTC run id", persistence=True, persistence_type="session")], className="ops-field"),
+                                        html.Div([dbc.Label("Epochs"), dbc.Input(id="training-num-epochs", type="number", min=1, step=1, value=80)], className="ops-field"),
+                                        html.Div([dbc.Label("Batch Size"), dbc.Input(id="training-batch-size", type="number", min=1, step=1, value=4)], className="ops-field"),
+                                        html.Div([dbc.Label("Learning Rate"), dbc.Input(id="training-learning-rate", type="number", min=0, step=0.0001, value=0.001)], className="ops-field"),
+                                    ],
+                                    className="ops-field-grid ops-field-grid-five",
+                                ),
+                            ],
+                            className="ops-panel",
+                        ),
+
+                        html.Section(
+                            [
+                                html.Div(
+                                    [
+                                        html.Div("Tracking", className="ops-section-kicker"),
+                                        html.H2("MLOps and Storage"),
+                                        html.P("The outbound run carries MLflow, DVC, B2, and segmentation-output destinations together."),
+                                    ],
+                                    className="ops-section-head",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                dbc.Label("MLflow Tracking URI"),
+                                                dbc.Input(id="training-mlflow-uri", value=DEFAULT_TRAINING_MLFLOW_TRACKING_URI, persistence=True, persistence_type="session"),
+                                                html.A(
+                                                    dbc.Button("Open MLflow", id="training-open-mlflow-button", color="info", outline=True, size="sm", className="mt-2 w-100"),
+                                                    id="training-open-mlflow-link",
+                                                    href=mlflow_browser_url(DEFAULT_TRAINING_MLFLOW_TRACKING_URI),
+                                                    target="_blank",
+                                                    rel="noopener noreferrer",
+                                                ),
+                                            ],
+                                            className="ops-field",
+                                        ),
+                                        html.Div([dbc.Label("MLflow Experiment"), dbc.Input(id="training-mlflow-experiment", value="mls-training", persistence=True, persistence_type="session")], className="ops-field"),
+                                        html.Div([dbc.Label("DVC Remote"), dbc.Input(id="training-dvc-remote", value="b2remote", persistence=True, persistence_type="session")], className="ops-field"),
+                                        html.Div(
+                                            [
+                                                dbc.Label("Storage Options"),
+                                                dbc.Checklist(
+                                                    id="training-storage-flags",
+                                                    options=[{"label": "Upload training and segmentation artifacts to B2", "value": "upload_to_b2"}],
+                                                    value=["upload_to_b2"],
+                                                    switch=True,
+                                                ),
+                                            ],
+                                            className="ops-field ops-field-wide",
+                                        ),
+                                    ],
+                                    className="ops-field-grid",
+                                ),
+                            ],
+                            className="ops-panel",
+                        ),
+
+                        html.Section(
+                            [
+                                html.Div(
+                                    [
+                                        html.Div("Review", className="ops-section-kicker"),
+                                        html.H2("Payload and Job History"),
+                                        html.P("Preview the command, trigger the DAG, then keep the most recent payloads visible below the action."),
+                                    ],
+                                    className="ops-section-head",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Div(id="training-payload-table", className="ops-review-card"),
+                                        html.Div(
+                                            [
+                                                html.H3("Remote Command"),
+                                                html.Pre(id="training-command-preview", className="prep-command-preview ops-code-box"),
+                                            ],
+                                            className="ops-review-card",
+                                        ),
+                                    ],
+                                    className="ops-review-grid",
+                                ),
+                                html.Div(
+                                    [
+                                        dbc.Button("Trigger Training DAG", id="training-trigger-button", color="success", size="lg", className="ops-primary-action"),
+                                        html.Div(id="training-trigger-result", className="ops-trigger-result"),
+                                    ],
+                                    className="ops-trigger-row",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                html.H3("Recent Training Jobs"),
+                                                html.Span("local payload ledger", className="ops-chip"),
+                                            ],
+                                            className="ops-inline-title",
+                                        ),
+                                        html.Div(id="training-job-history"),
+                                    ],
+                                    className="ops-subpanel ops-history-panel",
+                                ),
+                            ],
+                            className="ops-panel ops-panel-review",
+                        ),
+                    ],
+                    className="ops-stack",
+                ),
+            ],
+            className="ops-workspace",
+        ),
+    ],
+)
+
+
 def _build_conf_from_values(values):
     airflow_queue = resolve_airflow_queue(values["execution_target"])
     return build_training_conf(
@@ -527,6 +845,30 @@ def refresh_training_compute_health(_n):
 def update_training_mlflow_link(uri):
     href = mlflow_browser_url(uri)
     return href, href == "#"
+
+
+@callback(
+    Output("training-job-history", "children"),
+    Input("training-history-refresh", "n_intervals"),
+    Input("training-trigger-result", "children"),
+)
+def refresh_training_history(_n, _latest_result):
+    rows = _training_history_rows()
+    if not rows:
+        return html.Div("No training payloads have been saved yet.", className="ops-empty-state")
+    return dash_table.DataTable(
+        data=rows,
+        columns=[
+            {"name": "Created", "id": "created_at"},
+            {"name": "Run ID", "id": "run_id"},
+            {"name": "Dataset", "id": "dataset"},
+            {"name": "Model", "id": "model"},
+            {"name": "Queue", "id": "queue"},
+            {"name": "Epochs", "id": "epochs"},
+        ],
+        page_size=8,
+        **_table_style(),
+    )
 
 
 @callback(

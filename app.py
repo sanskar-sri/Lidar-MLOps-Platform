@@ -66,6 +66,11 @@ app.layout = dbc.Container(
                         href="/training",
                         active="exact",
                     ),
+                    dbc.NavLink(
+                        "Postprocessing",
+                        href="/postprocessing",
+                        active="exact",
+                    ),
                 ],
                 pills=True,
                 className="top-nav",
