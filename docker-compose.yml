@@ -44,6 +44,9 @@ services:
       DASH_PORT: "8051"
       DASH_DEBUG: "0"
       LOCAL_STAGING_DIR: "/app/data/local_staging"
+      SILVER_LOCAL_CACHE_DIR: "/app/data/local_staging/silver_outputs"
+      GOLD_LOCAL_CACHE_DIR: "/app/data/local_staging/gold_outputs"
+      COMPUTE_HEALTH_POLL_MS: "4000"
       MLFLOW_INTERNAL_URL: "http://mlflow:5000"
       MLFLOW_PUBLIC_URL: "${MLFLOW_PUBLIC_URL:-http://localhost:5001}"
       MLFLOW_TRACKING_URI: "${MLFLOW_TRACKING_URI:-http://100.90.110.60:5001}"
@@ -52,6 +55,8 @@ services:
     volumes:
       # Persist uploaded/staged data between container restarts.
       - ./data:/app/data
+      # Mac Datasets folder — accessible inside the container as /datasets
+      - /Users/sanskarsrivastava/Desktop/Datasets:/datasets
 
     restart: unless-stopped
 

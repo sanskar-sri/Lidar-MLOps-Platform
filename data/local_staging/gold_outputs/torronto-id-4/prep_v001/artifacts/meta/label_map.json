@@ -1,0 +1,27 @@
+{
+  "dataset": "toronto-1",
+  "binary_classes": {
+    "0": "Non-Building",
+    "1": "Building"
+  },
+  "ignore_label": -1,
+  "raw_label_map": {
+    "4": 1,
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0
+  },
+  "raw_ignore_labels": [
+    0
+  ],
+  "paris_lille_raw_rule": "labels >= 100000000 use floor(label / 100000000) == 2 as building",
+  "coord_offset_subtracted": [
+    0.0,
+    0.0,
+    0.0
+  ]
+}

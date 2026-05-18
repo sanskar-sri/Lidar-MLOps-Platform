@@ -157,6 +157,10 @@ def empty_figure(title):
     return go.Figure(layout={"title": title})
 
 
+def panel_empty_state(message, color="warning"):
+    return dbc.Alert(message, color=color, className="mb-3")
+
+
 def bar_figure(data_frame, x, y, title, labels=None, color=None, color_map=None):
     labels = labels or {}
     color_map = color_map or {}
@@ -299,6 +303,8 @@ def data_explorer_stats_strip():
 
 
 def build_dataset_cards(rows, selected_dataset_id=None):
+    selected_dataset_id = str(selected_dataset_id or "").strip()
+
     if not rows:
         return dbc.Alert(
             "No registered datasets yet.",
@@ -361,6 +367,11 @@ def build_dataset_cards(rows, selected_dataset_id=None):
                 n_clicks=0,
                 type="button",
                 className=card_class,
+                title=f"Load dataset {dataset_id}",
+                **{
+                    "aria-pressed": "true" if selected else "false",
+                    "data-dataset-id": dataset_id,
+                },
             )
         )
 
@@ -447,8 +458,11 @@ def upload_dataset_modal():
     )
 
 
-def build_lineage_flowchart(dataset_id):
+def build_lineage_flowchart(dataset_id, metadata=None, analytics_status=None):
     dataset_id = str(dataset_id or "<dataset_id>")
+    metadata = metadata or {}
+    analytics_status = analytics_status or {}
+
     nodes = [
         ("Bronze", "raw tiles"),
         ("Profile", "metadata + analytics"),
@@ -510,6 +524,22 @@ def build_lineage_flowchart(dataset_id):
     svg_parts.append("</svg>")
     svg_markup = "".join(svg_parts)
 
+    readiness_checks = metadata.get("readiness_checks", []) or []
+    model_rows = metadata.get("model_compatibility", []) or []
+    label_maps = metadata.get("label_maps", []) or []
+    readiness_passes = sum(1 for item in readiness_checks if item.get("status") == "Pass")
+    model_ready = sum(1 for item in model_rows if item.get("status") == "Ready")
+    source_path = metadata.get("source_path") or f"bronze_raw_data/{dataset_id}/source_files/tiles/"
+
+    def lineage_item(label, value):
+        return html.Div(
+            [
+                html.Span(label, className="lineage-item-label"),
+                html.Code(str(value) if value not in (None, "") else "Not available"),
+            ],
+            className="lineage-path-row",
+        )
+
     return html.Div(
         [
             html.Img(
@@ -530,6 +560,18 @@ def build_lineage_flowchart(dataset_id):
                     html.Code(f"segmentation_outputs/{dataset_id}/"),
                 ],
                 className="lineage-path-row",
+            ),
+            lineage_item("Source", source_path),
+            lineage_item("Metadata", f"data/metadata/datasets/{dataset_id}.json"),
+            lineage_item("Label maps", len(label_maps)),
+            lineage_item("Readiness", f"{readiness_passes}/{len(readiness_checks)} checks passing"),
+            lineage_item("Model compatibility", f"{model_ready}/{len(model_rows)} model outputs ready"),
+            lineage_item(
+                "Analytics rows",
+                ", ".join(
+                    f"{name}: {count}"
+                    for name, count in analytics_status.items()
+                ) or "Not available",
             ),
         ],
         className="lineage-flowchart",
@@ -738,7 +780,7 @@ def toggle_upload_modal(open_clicks, close_clicks, is_open):
     Output("dataset-registry-table", "data"),
     Output("dataset-card-list", "children"),
     Input("upload-status-store", "data"),
-    Input("selected-dataset-id", "data"),
+    State("selected-dataset-id", "data"),
 )
 def refresh_dataset_registry(_, selected_dataset_id):
     try:
@@ -749,24 +791,51 @@ def refresh_dataset_registry(_, selected_dataset_id):
         return [], dbc.Alert(f"Could not load registry: {e}", color="danger")
 
 
+@callback(
+    Output("dataset-card-list", "children", allow_duplicate=True),
+    Input("selected-dataset-id", "data"),
+    State("dataset-registry-table", "data"),
+    prevent_initial_call=True,
+)
+def apply_card_selection(selected_dataset_id, rows):
+    if not rows:
+        return dash.no_update
+    return build_dataset_cards(rows, selected_dataset_id)
+
+
 # -------------------------------------------------------------------
 # 2. Select Dataset From Registry
 # -------------------------------------------------------------------
 
 @callback(
     Output("selected-dataset-id", "data"),
-    Input({"type": "dataset-card", "dataset_id": ALL}, "n_clicks"),
+    Input({"type": "dataset-card", "dataset_id": ALL}, "n_clicks_timestamp"),
+    State({"type": "dataset-card", "dataset_id": ALL}, "id"),
+    prevent_initial_call=True,
 )
-def select_dataset(clicks):
-    if not clicks or not any(clicks):
+def select_dataset(click_timestamps, card_ids):
+    if not click_timestamps or not card_ids:
         return dash.no_update
 
-    triggered_id = dash.ctx.triggered_id
+    clicked_cards = []
 
-    if not triggered_id:
+    for timestamp, card_id in zip(click_timestamps, card_ids):
+        try:
+            click_time = int(timestamp)
+        except (TypeError, ValueError):
+            click_time = -1
+
+        if click_time < 0 or not isinstance(card_id, dict):
+            continue
+
+        dataset_id = str(card_id.get("dataset_id") or "").strip()
+        if dataset_id:
+            clicked_cards.append((click_time, dataset_id))
+
+    if not clicked_cards:
         return dash.no_update
 
-    dataset_id = triggered_id.get("dataset_id")
+    _click_time, dataset_id = max(clicked_cards, key=lambda item: item[0])
 
     print("=" * 80)
     print("[DATASET SELECTED]")
@@ -1178,13 +1247,17 @@ def delete_dataset_or_tile(n_clicks, dataset_id, tile_name):
 
 @callback(
     Output("kpi-cards-container", "children"),
+    Output("attribute-empty-state", "children"),
     Output("attribute-table", "data"),
     Output("attribute-chart", "figure"),
+    Output("label-empty-state", "children"),
     Output("label-table", "data"),
     Output("label-chart", "figure"),
+    Output("class-label-empty-state", "children"),
     Output("class-label-table", "data"),
     Output("class-label-pie-chart", "figure"),
     Output("class-label-bar-chart", "figure"),
+    Output("spatial-empty-state", "children"),
     Output("spatial-table", "data"),
     Output("spatial-z-range-chart", "figure"),
     Output("spatial-point-count-chart", "figure"),
@@ -1208,13 +1281,17 @@ def load_dataset_dashboard(dataset_id):
                 "Select a dataset from the registry to view KPIs.",
                 color="info",
             ),
+            panel_empty_state("Select a dataset to view point-cloud attributes.", "info"),
             [],
             empty_fig,
+            panel_empty_state("Select a dataset to view binary label distribution.", "info"),
             [],
             empty_fig,
+            panel_empty_state("Select a dataset to view semantic class distribution.", "info"),
             [],
             empty_fig,
             empty_fig,
+            panel_empty_state("Select a dataset to view spatial summaries.", "info"),
             [],
             empty_fig,
             empty_fig,
@@ -1263,9 +1340,15 @@ def load_dataset_dashboard(dataset_id):
             },
         )
         attribute_data = attributes.to_dict("records")
+        attribute_state = ""
     else:
         attr_fig = empty_figure("No attribute data available")
         attribute_data = []
+        attribute_state = panel_empty_state(
+            f"No attribute summary rows were found for dataset '{dataset_id}'. "
+            "Regenerate metadata analytics if this dataset should have point-cloud attribute profiling.",
+            "warning",
+        )
 
     # ---------------------------------------------------------------
     # Binary label chart
@@ -1280,9 +1363,15 @@ def load_dataset_dashboard(dataset_id):
             color_map=BINARY_LABEL_COLORS,
         )
         label_data = labels.to_dict("records")
+        label_state = ""
     else:
         label_fig = empty_figure("No binary label data available")
         label_data = []
+        label_state = panel_empty_state(
+            f"No binary label distribution was found for dataset '{dataset_id}'. "
+            "This is expected for unlabeled or inference-only datasets; otherwise regenerate label analytics.",
+            "warning",
+        )
 
     # ---------------------------------------------------------------
     # Individual semantic class-label charts
@@ -1346,11 +1435,17 @@ def load_dataset_dashboard(dataset_id):
         )
 
         class_label_data = class_labels.to_dict("records")
+        class_label_state = ""
 
     else:
         class_label_pie_fig = empty_figure("No individual semantic class data available")
         class_label_bar_fig = empty_figure("No individual semantic class data available")
         class_label_data = []
+        class_label_state = panel_empty_state(
+            f"No semantic class distribution was found for dataset '{dataset_id}'. "
+            "Upload or regenerate a real XML/JSON/YAML label map if semantic labels should be available.",
+            "warning",
+        )
 
     # ---------------------------------------------------------------
     # Spatial charts
@@ -1391,17 +1486,43 @@ def load_dataset_dashboard(dataset_id):
         )
 
         spatial_data = spatial.to_dict("records")
+        spatial_state = ""
 
     else:
         spatial_z_range_fig = empty_figure("No spatial data available")
         spatial_point_count_fig = empty_figure("No spatial data available")
         spatial_density_fig = empty_figure("No spatial data available")
         spatial_data = []
+        spatial_state = panel_empty_state(
+            f"No spatial summary rows were found for dataset '{dataset_id}'. "
+            "Regenerate metadata analytics to populate bounding boxes, extents, and density statistics.",
+            "warning",
+        )
 
-    readiness_data = metadata.get("readiness_checks", [])
-    model_data = metadata.get("model_compatibility", [])
+    if metadata:
+        readiness_data = metadata.get("readiness_checks", [])
+        model_data = metadata.get("model_compatibility", [])
+    else:
+        readiness_data = [
+            {
+                "check": "Metadata",
+                "status": "Warning",
+                "message": f"No local metadata JSON was found for dataset '{dataset_id}'.",
+            }
+        ]
+        model_data = []
 
-    lineage = build_lineage_flowchart(dataset_id)
+    lineage = build_lineage_flowchart(
+        dataset_id,
+        metadata,
+        analytics_status={
+            "kpi": len(kpis) if kpis is not None else 0,
+            "attributes": len(attributes) if attributes is not None else 0,
+            "labels": len(labels) if labels is not None else 0,
+            "classes": len(class_labels) if class_labels is not None else 0,
+            "spatial": len(spatial) if spatial is not None else 0,
+        },
+    )
 
     for fig in [
         attr_fig,
@@ -1416,13 +1537,17 @@ def load_dataset_dashboard(dataset_id):
 
     return (
         kpi_cards,
+        attribute_state,
         attribute_data,
         attr_fig,
+        label_state,
         label_data,
         label_fig,
+        class_label_state,
         class_label_data,
         class_label_pie_fig,
         class_label_bar_fig,
+        spatial_state,
         spatial_data,
         spatial_z_range_fig,
         spatial_point_count_fig,
@@ -1521,7 +1646,7 @@ def run_preprocessing(n_clicks, dataset_id):
             "Open the Preprocessing page to create or trigger a remote Airflow run for dataset: ",
             html.Code(dataset_id),
             html.Br(),
-            dcc.Link("Go to Preprocessing Control", href="/preprocessing"),
+            dcc.Link("Go to Preprocessing Control", href=f"/preprocessing?dataset_id={dataset_id}"),
         ],
         color="info",
     )
@@ -1560,16 +1685,20 @@ def open_in_rerun(n_clicks, dataset_id):
 
 @callback(
     Output("rerun-tile-selector", "options"),
+    Output("rerun-tile-state", "children"),
     Input("selected-dataset-id", "data"),
 )
 def populate_rerun_tile_selector(dataset_id):
     if not dataset_id:
-        return []
+        return [], panel_empty_state("Select a dataset to load available Rerun tiles.", "info")
 
     file_summary = load_file_summary(dataset_id)
 
     if file_summary is None or file_summary.empty:
-        return []
+        return [], panel_empty_state(
+            f"No file summary was found for dataset '{dataset_id}', so no Rerun tiles can be listed.",
+            "warning",
+        )
 
     options = []
 
@@ -1593,7 +1722,43 @@ def populate_rerun_tile_selector(dataset_id):
             }
         )
 
-    return options
+    if not options:
+        return [], panel_empty_state(
+            f"No PLY tiles were found in the file summary for dataset '{dataset_id}'.",
+            "warning",
+        )
+
+    return options, dbc.Alert(
+        f"{len(options)} tile option(s) loaded for dataset '{dataset_id}'.",
+        color="secondary",
+        className="mb-0",
+    )
+
+
+@callback(
+    Output("rerun-tile-selector", "value"),
+    Output("rerun-viewer-placeholder", "children", allow_duplicate=True),
+    Input("selected-dataset-id", "data"),
+    prevent_initial_call=True,
+)
+def reset_rerun_state_for_dataset(dataset_id):
+    if not dataset_id:
+        return None, [
+            html.Br(),
+            dbc.Alert("Select a dataset before generating a Rerun recording.", color="info"),
+        ]
+
+    return None, [
+        html.Br(),
+        dbc.Alert(
+            [
+                "Rerun context is set to dataset ",
+                html.Code(dataset_id),
+                ". Select one tile and generate a fresh recording for this dataset.",
+            ],
+            color="info",
+        ),
+    ]
 
 
 # -------------------------------------------------------------------
@@ -1637,6 +1802,20 @@ def load_rerun_preview(
             "Large Rerun visualization is optimized for one tile at a time. Please select only one tile.",
             color="warning",
         )
+
+    for tile_path in selected_tiles:
+        tile_text = str(tile_path or "")
+        if dataset_id not in tile_text:
+            return dbc.Alert(
+                [
+                    html.Strong("The selected Rerun tile does not belong to the current dataset. "),
+                    html.Br(),
+                    "The tile selector was reset for dataset ",
+                    html.Code(dataset_id),
+                    ". Please pick a tile from the refreshed dropdown before generating a recording.",
+                ],
+                color="warning",
+            )
 
     metadata = load_dataset_metadata(dataset_id)
 

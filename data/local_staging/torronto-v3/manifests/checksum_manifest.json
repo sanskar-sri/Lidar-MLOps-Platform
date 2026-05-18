@@ -1,0 +1,27 @@
+{
+    "dataset_id": "torronto-v3",
+    "checksum_algorithm": "sha1",
+    "created_at": "2026-05-17T22:10:37.990724",
+    "files": [
+        {
+            "file_name": "L001.ply",
+            "b2_path": "bronze_raw_data/torronto-v3/source_files/tiles/L001.ply",
+            "file_role": "point_cloud_tile",
+            "sha1": "854d8acf433dc8e4e6ca098f110437d07c026ed6",
+            "file_size_bytes": 927388830,
+            "verified_in_b2": true,
+            "verified_size_bytes": 927388830,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f2002415e7d6482a4_d20260517_m220618_c005_v0501043_t0056_u01779055578907"
+        },
+        {
+            "file_name": "L002.ply",
+            "b2_path": "bronze_raw_data/torronto-v3/source_files/tiles/L002.ply",
+            "file_role": "point_cloud_tile",
+            "sha1": "8b9b040554ece8aa16ede63e4d82e7fd84e590e8",
+            "file_size_bytes": 442203833,
+            "verified_in_b2": true,
+            "verified_size_bytes": 442203833,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f200081e8e65ead24_d20260517_m220800_c005_v0501037_t0019_u01779055680113"
+        }
+    ]
+}

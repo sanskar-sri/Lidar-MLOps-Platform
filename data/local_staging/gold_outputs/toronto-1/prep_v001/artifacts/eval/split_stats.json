@@ -1,0 +1,32 @@
+{
+  "train": {
+    "total_points": 27104797,
+    "class_distribution": {
+      "Non-Building": 21378884,
+      "Building": 4591096
+    },
+    "building_ratio": 0.1694,
+    "imbalance_ratio": 4.66,
+    "majority_baseline_oa": 0.7887
+  },
+  "val": {
+    "total_points": 4105181,
+    "class_distribution": {
+      "Non-Building": 3193849,
+      "Building": 674222
+    },
+    "building_ratio": 0.1642,
+    "imbalance_ratio": 4.74,
+    "majority_baseline_oa": 0.778
+  },
+  "test": {
+    "total_points": 6736414,
+    "class_distribution": {
+      "Non-Building": 4401492,
+      "Building": 2276997
+    },
+    "building_ratio": 0.338,
+    "imbalance_ratio": 1.93,
+    "majority_baseline_oa": 0.6534
+  }
+}

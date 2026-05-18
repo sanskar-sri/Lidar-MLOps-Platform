@@ -1,5 +1,7 @@
 import json
+import os
 from datetime import datetime, timezone
+from urllib.parse import parse_qs
 
 import dash
 import dash_bootstrap_components as dbc
@@ -9,6 +11,8 @@ from dash.exceptions import PreventUpdate
 from components.gold_layer_section import build_gold_layer_section
 from components.platform_theme import (
     empty_state,
+    ops_service_health_card,
+    ops_table_style,
     ops_topbar,
     platform_hero,
     section_head,
@@ -18,7 +22,6 @@ from components.platform_theme import (
 from components.silver_layer_section import build_silver_layer_section
 from services.compute_nodes_service import (
     COMPUTE_HEALTH_POLL_MS,
-    build_compute_target_options,
     check_compute_nodes,
     resolve_airflow_queue,
 )
@@ -29,6 +32,7 @@ from services.preprocessing_runtime_service import (
     AIRFLOW_PREPROCESSING_DAG_ID,
     build_airflow_status_snapshot,
     compute_silver_readiness,
+    load_gold_metadata_if_available,
     load_local_or_b2_silver_metadata,
     trigger_airflow_preprocessing_dag,
     verify_b2_silver_outputs,
@@ -42,13 +46,12 @@ from services.preprocessing_service import (
     DEFAULT_VAL_SEGMENTS,
     build_airflow_conf,
     build_dataset_config,
-    build_remote_command,
     build_storage_contract,
     persist_airflow_request,
 )
 
 
-dash.register_page(__name__, path="/preprocessing", name="Preprocessing")
+dash.register_page(__name__, path="/preprocessing", name="Preprocessing", title="Preprocessing - LiDAR Platform")
 
 
 # Shared operations UI helpers live in components.platform_theme. Other pages can
@@ -58,37 +61,6 @@ dash.register_page(__name__, path="/preprocessing", name="Preprocessing")
 
 POLL_MS = 5000
 DEFAULT_PIPELINE_VERSION = "v9_airflow_compat"
-
-
-def _table_style():
-    return {
-        "style_table": {
-            "overflowX": "auto",
-            "width": "100%",
-            "border": "1px solid rgba(125, 180, 255, 0.18)",
-            "borderRadius": "8px",
-        },
-        "style_cell": {
-            "textAlign": "left",
-            "padding": "9px",
-            "fontFamily": "Arial",
-            "fontSize": "12px",
-            "whiteSpace": "normal",
-            "height": "auto",
-            "backgroundColor": "#0b111b",
-            "color": "#edf2f7",
-            "border": "1px solid rgba(125, 180, 255, 0.14)",
-        },
-        "style_header": {
-            "fontWeight": "bold",
-            "backgroundColor": "#111827",
-            "color": "#edf2f7",
-            "border": "1px solid rgba(125, 180, 255, 0.18)",
-        },
-        "style_data_conditional": [
-            {"if": {"row_index": "odd"}, "backgroundColor": "#0f1724"},
-        ],
-    }
 
 
 def _dataset_options():
@@ -194,49 +166,6 @@ def _storage_rows(storage):
     ]
 
 
-def _compute_node_card(item):
-    tone = item.get("tone", "warning")
-    roles = ", ".join(item.get("roles") or [])
-    metrics = item.get("metrics") or []
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Span(className=f"prep-node-dot prep-node-dot-{tone}"),
-                    html.Div(item.get("name", ""), className="prep-node-name"),
-                ],
-                className="prep-node-head",
-            ),
-            html.Div(item.get("state", ""), className=f"prep-node-state prep-node-state-{tone}"),
-            html.Div(item.get("detail", ""), className="prep-node-detail"),
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Div(metric.get("label", ""), className="prep-node-metric-label"),
-                            html.Div(metric.get("value", ""), className="prep-node-metric-value"),
-                            html.Div(metric.get("detail", ""), className="prep-node-metric-detail"),
-                        ],
-                        className="prep-node-metric",
-                    )
-                    for metric in metrics
-                ],
-                className="prep-node-metrics",
-            )
-            if metrics
-            else None,
-            html.Div(
-                [
-                    html.Span(f"Queue: {item.get('airflow_queue') or item.get('id')}", className="prep-node-chip"),
-                    html.Span(roles or "roles pending", className="prep-node-chip"),
-                ],
-                className="prep-node-chips",
-            ),
-        ],
-        className=f"prep-node-card prep-node-card-{tone}",
-    )
-
-
 def _metric_pair(label, value):
     return html.Div(
         [html.Span(label, className="prep-summary-label"), html.Span(value, className="prep-summary-value")],
@@ -287,21 +216,45 @@ def _status_panel(status):
         {"field": "Checked at", "value": status.get("checked_at") or "n/a"},
     ]
 
+    completed = int(status.get("completed_tasks") or 0)
+    total = int(status.get("total_tasks") or 0)
+    task_chips = (
+        html.Div(
+            [
+                small_status(
+                    f"Task {index + 1}",
+                    "success" if index < completed else ("running" if state in {"queued", "running", "scheduled"} and index == completed else "pending"),
+                )
+                for index in range(total)
+            ],
+            className="prep-task-chips",
+        )
+        if total
+        else None
+    )
+
     return html.Div(
         [
             html.Div(
                 [
                     small_status("DAG state", state),
-                    html.Div(f"{progress}%", className="airflow-progress-label"),
+                    html.Div(
+                        [
+                            html.Span(f"{progress}%", className="airflow-progress-label"),
+                            html.Span(f"elapsed {_duration_label(status.get('start_time'), status.get('end_time'))}"),
+                        ],
+                        className="airflow-progress-label-group",
+                    ),
                 ],
                 className="airflow-status-head",
             ),
             dbc.Progress(value=min(max(float(progress or 0), 0), 100), striped=state in {"queued", "running"}, animated=state == "running", className="airflow-progress"),
+            task_chips,
             dash_table.DataTable(
                 columns=[{"name": "Field", "id": "field"}, {"name": "Value", "id": "value"}],
                 data=rows,
                 page_size=8,
-                **_table_style(),
+                **ops_table_style(),
             ),
             dbc.Alert(
                 [
@@ -343,7 +296,7 @@ def _verification_panel(verification):
                 ],
                 data=rows,
                 page_size=8,
-                **_table_style(),
+                **ops_table_style(),
             ),
             dbc.Alert(verification.get("error") or "", color="warning", className="mt-3", is_open=bool(verification.get("error"))),
         ],
@@ -490,20 +443,34 @@ def _build_conf_from_values(
     return conf
 
 
-def _compute_target_blocker(execution_target):
-    statuses = check_compute_nodes()
-    if execution_target == "any_gpu_worker":
-        if any(item.get("tone") == "connected" for item in statuses):
-            return None
-        return "No compute node is online. Start the health agent on the Windows workstation before triggering Airflow."
 
-    for item in statuses:
-        if item.get("id") == execution_target:
-            if item.get("tone") == "connected":
-                return None
-            return f"{item.get('name')} is {item.get('state')}: {item.get('detail')}"
+def _preproc_stepper(dataset_id=None, airflow_status=None, dag_run=None, silver_status=None):
+    state = (airflow_status or dag_run or {}).get("state")
+    silver_state = (silver_status or {}).get("status")
+    has_run = bool((dag_run or {}).get("dag_run_id"))
+    running = state in {"queued", "running", "scheduled"}
+    airflow_done = state == "success"
 
-    return f"Execution target {execution_target} is not configured in this dashboard."
+    return [
+        step_item("01", "Dataset", "Select source, labels, and routing", "blue", "done" if dataset_id else "active"),
+        step_item("02", "Parameters", "Configure voxel, features, splits", "green", "done" if has_run else ("active" if dataset_id else None)),
+        step_item("03", "Execution", "Trigger and monitor Airflow", "purple", "done" if airflow_done else ("active" if running else None)),
+        step_item("04", "Outputs", "Verify Silver and preview Gold", "amber", "done" if silver_state == "passed" else ("active" if airflow_done else None)),
+    ]
+
+
+def _preflight_banner(dataset_id, seg_class, b2_prefix):
+    checks = [
+        ("Dataset", bool(dataset_id), dataset_id or "not set"),
+        ("Segments", "ops-validation-badge-danger" not in (seg_class or ""), "valid" if "danger" not in (seg_class or "") else "check split"),
+        ("B2 Prefix", bool(_normalize_prefix(b2_prefix)), _normalize_prefix(b2_prefix) or "not set"),
+    ]
+    all_ok = all(ok for _, ok, _ in checks)
+    children = [
+        small_status(label, "success" if ok else detail)
+        for label, ok, detail in checks
+    ]
+    return children, f"ops-preflight-banner {'ops-preflight-banner-ok' if all_ok else 'ops-preflight-banner-warn'}"
 
 
 def _segment_split_blocker(mode, num_segments, train_segments, val_segments, test_segments):
@@ -516,6 +483,448 @@ def _segment_split_blocker(mode, num_segments, train_segments, val_segments, tes
     if train + val + test == total:
         return None
     return f"Train + val + test segments must equal total segments ({train} + {val} + {test} != {total})."
+
+
+# ---------------------------------------------------------------------------
+# Layout helpers — DE-style visual language
+# ---------------------------------------------------------------------------
+
+def _stat_tile(label, display):
+    return html.Div(
+        [
+            html.Div(str(display), className="de-stat-value lp-stat-value"),
+            html.Div(label, className="de-stat-label"),
+        ],
+        className="de-stat",
+    )
+
+
+def _section_label(text):
+    return html.Div(text, className="preproc-section-label")
+
+
+def _field(label, *children, wide=False):
+    cls = "ops-field ops-field-wide" if wide else "ops-field"
+    return html.Div([dbc.Label(label), *children], className=cls)
+
+
+def _preproc_sidebar():
+    return html.Aside(
+        className="data-explorer-sidebar",
+        children=[
+            html.Div(
+                [
+                    html.Div("Datasets", className="data-explorer-eyebrow"),
+                    html.H4("Select a dataset"),
+                    html.P(
+                        "Pick a registered dataset to begin the medallion pipeline.",
+                        className="mb-2",
+                    ),
+                ],
+                className="data-explorer-sidebar-head",
+            ),
+            dcc.Dropdown(
+                id="preproc-dataset-dropdown",
+                options=_dataset_options(),
+                placeholder="Select a dataset…",
+                clearable=True,
+                className="mb-3",
+            ),
+            html.Div(
+                [
+                    dbc.Input(id="preproc-dataset-id", persistence=True, persistence_type="session"),
+                    dbc.Input(id="preproc-dataset-name", persistence=True, persistence_type="session"),
+                    dbc.Input(id="preproc-execution-target", value="any_gpu_worker"),
+                ],
+                style={"display": "none"},
+            ),
+            html.Div(id="preproc-dataset-summary", className="mb-3"),
+            _section_label("Compute Nodes"),
+            html.Div(
+                id="preproc-compute-health-grid",
+                className="prep-node-grid ops-node-grid mb-3",
+            ),
+            dbc.Button(
+                "Start Preprocessing",
+                id="preproc-quick-start-button",
+                color="success",
+                disabled=True,
+                className="w-100 mb-2",
+            ),
+            html.Span(
+                "Select a dataset to enable quick-start with default parameters",
+                id="preproc-quick-start-hint",
+                className="ops-muted-copy",
+                style={"fontSize": "11px"},
+            ),
+            html.Div(id="registry-action-message", className="mt-2"),
+        ],
+    )
+
+
+def _tab_dataset():
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div("Step 01", className="data-explorer-eyebrow"),
+                    html.H3("Dataset and Label Configuration"),
+                    html.P(
+                        "Configure label field mappings, binary class IDs, "
+                        "spatial split routing, and B2 output path for this run."
+                    ),
+                ],
+                className="preproc-tab-head",
+            ),
+            html.Div(
+                [
+                    _field("Label Field", dbc.Input(id="preproc-label-field", value="class", placeholder="class or scalar_Label", persistence=True, persistence_type="session")),
+                    _field("Building Labels", dbc.Input(id="preproc-building-labels", value="2", placeholder="e.g. 2 or 4", persistence=True, persistence_type="session")),
+                    _field("Non-Building Labels", dbc.Input(id="preproc-non-building-labels", value="1, 3, 4, 5, 6, 7, 8, 9", placeholder="Comma-separated raw class IDs", persistence=True, persistence_type="session"), wide=True),
+                    _field("Ignore Labels", dbc.Input(id="preproc-ignore-labels", value="0", placeholder="Comma-separated raw class IDs", persistence=True, persistence_type="session")),
+                    _field("Mode", dcc.Dropdown(
+                        id="preproc-mode",
+                        options=[
+                            {"label": "Training — labels required", "value": "train"},
+                            {"label": "Inference — labels optional", "value": "inference"},
+                        ],
+                        value="train",
+                        clearable=False,
+                    )),
+                    _field("B2 Silver Output Prefix", dbc.Input(id="preproc-b2-output-prefix", placeholder="silver_preprocessed_data/<dataset>/<prep_version>", persistence=True, persistence_type="session"), wide=True),
+                ],
+                className="ops-field-grid",
+            ),
+            html.Hr(className="preproc-tab-divider"),
+            _section_label("Segment Split"),
+            html.P("Train + val + test must equal total segments.", className="ops-muted-copy"),
+            html.Div(
+                [
+                    _field("Total", dbc.Input(id="preproc-num-segments", type="number", value=DEFAULT_NUM_SEGMENTS, min=1, step=1)),
+                    _field("Train", dbc.Input(id="preproc-train-segments", type="number", value=DEFAULT_TRAIN_SEGMENTS, min=0, step=1)),
+                    _field("Val", dbc.Input(id="preproc-val-segments", type="number", value=DEFAULT_VAL_SEGMENTS, min=0, step=1)),
+                    _field("Test", dbc.Input(id="preproc-test-segments", type="number", value=DEFAULT_TEST_SEGMENTS, min=0, step=1)),
+                    html.Div(id="preproc-segment-validation", className="ops-validation-badge"),
+                ],
+                className="ops-field-grid ops-segment-grid",
+            ),
+        ],
+        className="preproc-tab-body",
+    )
+
+
+def _tab_parameters():
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div("Step 02", className="data-explorer-eyebrow"),
+                    html.H3("Pipeline Parameters"),
+                    html.P(
+                        "Every value below is injected directly into the Airflow DAG conf — "
+                        "no hidden defaults are applied by Dash."
+                    ),
+                ],
+                className="preproc-tab-head",
+            ),
+            _section_label("Versioning and Output"),
+            html.Div(
+                [
+                    _field("Preprocessing Version", dbc.Input(id="preproc-version", value="prep_v001", persistence=True, persistence_type="session")),
+                    _field("Pipeline Version", dbc.Input(id="preproc-pipeline-version", value=DEFAULT_PIPELINE_VERSION, persistence=True, persistence_type="session")),
+                    _field("Output Tier", dcc.Dropdown(
+                        id="preproc-output-tier",
+                        options=[
+                            {"label": "Silver and Gold", "value": "silver_and_gold"},
+                            {"label": "Silver only", "value": "silver_only"},
+                        ],
+                        value="silver_and_gold",
+                        clearable=False,
+                    )),
+                    _field("Output Mode", dcc.Dropdown(
+                        id="preproc-output-mode",
+                        options=[
+                            {"label": "All model formats", "value": "all"},
+                            {"label": "Traditional blocks only", "value": "traditional"},
+                            {"label": "PTv3 / Pointcept only", "value": "ptv3"},
+                        ],
+                        value="all",
+                        clearable=False,
+                    )),
+                ],
+                className="ops-field-grid",
+            ),
+            _section_label("Features and Encoding"),
+            html.Div(
+                [
+                    _field("Input Features", dbc.Checklist(
+                        id="preproc-input-features",
+                        options=[
+                            {"label": "XYZ", "value": "xyz"},
+                            {"label": "Intensity", "value": "intensity"},
+                            {"label": "RGB", "value": "rgb"},
+                            {"label": "Labels", "value": "labels"},
+                        ],
+                        value=["xyz", "intensity", "rgb", "labels"],
+                        inline=True,
+                        switch=True,
+                    ), wide=True),
+                    _field("Label Mapping Mode", dcc.Dropdown(
+                        id="preproc-label-mode",
+                        options=[
+                            {"label": "Registry or raw numeric IDs", "value": "registry_or_raw_ids"},
+                            {"label": "Raw numeric IDs only", "value": "raw_numeric_ids"},
+                            {"label": "External XML/JSON map required", "value": "mapping_file_required"},
+                        ],
+                        value="registry_or_raw_ids",
+                        clearable=False,
+                    )),
+                    _field("Coordinate Normalization", dcc.Dropdown(
+                        id="preproc-coordinate-normalization",
+                        options=[
+                            {"label": "Subtract coordinate offset", "value": "offset_subtract"},
+                            {"label": "Keep original coordinates", "value": "none"},
+                        ],
+                        value="offset_subtract",
+                        clearable=False,
+                    )),
+                    _field("Split Strategy", dcc.Dropdown(
+                        id="preproc-split-strategy",
+                        options=[
+                            {"label": "Spatial segment split", "value": "segment_spatial"},
+                            {"label": "Tile-level split", "value": "tile_split"},
+                            {"label": "Existing split metadata", "value": "existing_split_metadata"},
+                        ],
+                        value="segment_spatial",
+                        clearable=False,
+                    )),
+                ],
+                className="ops-field-grid",
+            ),
+            _section_label("Voxelization and Blocking"),
+            html.Div(
+                [
+                    _field("Voxel Size (m)", dbc.Input(id="preproc-voxel-size", type="number", value=0.02, step=0.01, min=0)),
+                    _field("Voxel Keep Strategy", dcc.Dropdown(
+                        id="preproc-voxel-strategy",
+                        options=[
+                            {"label": "Representative point", "value": "representative"},
+                            {"label": "Centroid mean", "value": "centroid"},
+                        ],
+                        value="representative",
+                        clearable=False,
+                    )),
+                    _field("Block Size (m)", dbc.Input(id="preproc-block-size", type="number", value=2.0, step=0.5)),
+                    _field("Points / Block", dbc.Input(id="preproc-n-points", type="number", value=8192, step=1024)),
+                    _field("Max Train Blocks", dbc.Input(id="preproc-max-blocks", type="number", value=8000, step=500)),
+                    _field("Val / Test Stride", dbc.Input(id="preproc-stride", type="number", value=1.5, step=0.25)),
+                    _field("Split Gap (m)", dbc.Input(id="preproc-split-gap", type="number", value=2.0, step=0.5)),
+                    _field("Min Building Ratio", dbc.Input(id="preproc-min-bldg", type="number", value=0.01, step=0.005)),
+                ],
+                className="ops-field-grid ops-field-grid-four",
+            ),
+            _section_label("Model-Specific and Workers"),
+            html.Div(
+                [
+                    _field("RandLA Overlap", dbc.Input(id="preproc-randla-overlap", type="number", value=0.0, step=0.05, min=0, max=0.95)),
+                    _field("PTv3 Scene Length", dbc.Input(id="preproc-ptv3-length", type="number", value=50.0, step=5)),
+                    _field("Workers", dbc.Input(id="preproc-workers", type="number", min=1, max=64, value=24)),
+                    _field("Generated Features", dbc.Checklist(
+                        id="preproc-feature-flags",
+                        options=[
+                            {"label": "Compute normals", "value": "compute_normals"},
+                            {"label": "Include density", "value": "include_density"},
+                            {"label": "Write silver tier", "value": "write_silver"},
+                            {"label": "Save PLY previews", "value": "save_ply"},
+                            {"label": "Compress output", "value": "compress_output"},
+                        ],
+                        value=["compute_normals", "include_density", "write_silver", "save_ply"],
+                        inline=True,
+                        switch=True,
+                    ), wide=True),
+                ],
+                className="ops-field-grid",
+            ),
+        ],
+        className="preproc-tab-body",
+    )
+
+
+def _tab_execute():
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div("Step 03", className="data-explorer-eyebrow"),
+                    html.H3("MLOps and Airflow Execution"),
+                    html.P(
+                        "Set tracking destinations, review the generated DAG conf, "
+                        "and trigger the remote Airflow preprocessing run."
+                    ),
+                ],
+                className="preproc-tab-head",
+            ),
+            _section_label("Tracking and MLOps"),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            dbc.Label("MLflow Tracking URI"),
+                            dbc.Input(
+                                id="preproc-mlflow-tracking-uri",
+                                value=DEFAULT_MLFLOW_TRACKING_URI,
+                                placeholder="./mlruns or http://mlflow-host:5000",
+                                persistence=True,
+                                persistence_type="session",
+                            ),
+                            html.A(
+                                dbc.Button(
+                                    "Open MLflow",
+                                    id="preproc-open-mlflow-button",
+                                    color="info",
+                                    outline=True,
+                                    size="sm",
+                                    className="mt-2 w-100",
+                                ),
+                                id="preproc-open-mlflow-link",
+                                href=mlflow_browser_url(DEFAULT_MLFLOW_TRACKING_URI),
+                                target="_blank",
+                                rel="noopener noreferrer",
+                            ),
+                        ],
+                        className="ops-field",
+                    ),
+                    _field("MLflow Experiment", dbc.Input(id="preproc-mlflow-experiment", value="mls-preprocessing", persistence=True, persistence_type="session")),
+                    _field("DVC Remote", dbc.Input(id="preproc-dvc-remote", value="b2remote", persistence=True, persistence_type="session")),
+                    _field("MLflow Run Name", dbc.Input(id="preproc-mlflow-run-name", placeholder="Optional; defaults to dataset + run id", persistence=True, persistence_type="session")),
+                    _field("Tracking Options", dbc.Checklist(
+                        id="preproc-mlops-flags",
+                        options=[
+                            {"label": "Log small MLflow artifacts", "value": "log_artifacts"},
+                            {"label": "Disable MLflow", "value": "disable_mlflow"},
+                        ],
+                        value=["log_artifacts"],
+                        inline=True,
+                        switch=True,
+                    ), wide=True),
+                ],
+                className="ops-field-grid",
+            ),
+            html.Hr(className="preproc-tab-divider"),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.H3("Preprocessing Parameter Summary"),
+                            dash_table.DataTable(
+                                id="preproc-parameter-summary-table",
+                                columns=[{"name": "Parameter", "id": "parameter"}, {"name": "Value", "id": "value"}],
+                                data=[],
+                                page_size=18,
+                                **ops_table_style(),
+                            ),
+                        ],
+                        className="ops-review-card",
+                    ),
+                    html.Div(
+                        [
+                            html.H3("Bucket Contract"),
+                            dash_table.DataTable(
+                                id="preproc-storage-table",
+                                columns=[{"name": "Role", "id": "role"}, {"name": "B2 Path", "id": "path"}],
+                                data=[],
+                                page_size=10,
+                                **ops_table_style(),
+                            ),
+                        ],
+                        className="ops-review-card",
+                    ),
+                ],
+                className="ops-review-grid",
+            ),
+            html.Div(
+                [
+                    html.Div(id="preproc-preflight-banner", className="ops-preflight-banner"),
+                    html.Div(
+                        "Start Preprocessing sends this JSON to the remote Airflow DAG. "
+                        "Dash only stores state and polls status — no local execution.",
+                        className="ops-execution-note",
+                    ),
+                    dbc.ButtonGroup(
+                        [
+                            dbc.Button("Save Trigger Payload", id="preproc-save-payload-button", color="secondary", outline=True),
+                            dbc.Button("Start Preprocessing", id="preproc-trigger-airflow-button", color="success", className="ops-trigger-button"),
+                        ],
+                        className="ops-action-group",
+                    ),
+                ],
+                className="ops-trigger-row",
+            ),
+            html.Div(id="preproc-action-message", className="mt-3"),
+            html.Hr(className="preproc-tab-divider"),
+            _section_label("Live Airflow Status"),
+            html.Div(
+                [
+                    html.Div("DAG Run Monitor", className="preproc-tab-head"),
+                    html.Div(id="preproc-airflow-status-panel"),
+                ],
+                className="preproc-tab-section",
+            ),
+        ],
+        className="preproc-tab-body",
+    )
+
+
+def _tab_silver():
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div("Step 04a", className="data-explorer-eyebrow"),
+                    html.H3("Silver Layer Verification"),
+                    html.P(
+                        "Verify that Silver artifacts exist in B2 before unlocking "
+                        "the Gold output contract and analytics."
+                    ),
+                ],
+                className="preproc-tab-head",
+            ),
+            html.Div(
+                [
+                    dbc.Button(
+                        "Verify Silver Outputs in B2",
+                        id="preproc-verify-silver-button",
+                        color="info",
+                        outline=True,
+                    ),
+                    html.Div(id="preproc-silver-verification-panel", className="mt-3"),
+                ],
+                className="ops-review-card",
+            ),
+            html.Div(id="preproc-silver-layer-container"),
+        ],
+        className="preproc-tab-body",
+    )
+
+
+def _tab_gold():
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div("Step 04b", className="data-explorer-eyebrow"),
+                    html.H3("Gold Output Contract"),
+                    html.P(
+                        "Gold artifacts remain planned until Silver gates pass. "
+                        "Training consumes the blocks, split files, and metadata from this contract."
+                    ),
+                ],
+                className="preproc-tab-head",
+            ),
+            html.Div(id="preproc-gold-layer-container"),
+        ],
+        className="preproc-tab-body",
+    )
 
 
 def _form_state_specs(prefix="State"):
@@ -603,9 +1012,12 @@ FORM_INPUTS = [
 ]
 
 
-layout = html.Div(
-    className="prep-page preprocessing-page ops-page",
+layout = dbc.Container(
+    fluid=True,
+    className="data-explorer-page preproc-page",
     children=[
+        # ── Infrastructure ────────────────────────────────────────────────
+        html.Div(id="preproc-stepper", style={"display": "none"}),
         dcc.Store(id="preproc-conf-store"),
         dcc.Store(id="preproc-dag-run-store"),
         dcc.Store(id="preproc-airflow-status-store"),
@@ -613,386 +1025,168 @@ layout = html.Div(
         dcc.Interval(id="preproc-dataset-refresh", interval=60000, n_intervals=0),
         dcc.Interval(id="preproc-compute-health-refresh", interval=COMPUTE_HEALTH_POLL_MS, n_intervals=0),
         dcc.Interval(id="preproc-airflow-status-refresh", interval=POLL_MS, n_intervals=0, disabled=True),
-        ops_topbar("Preprocessing", "Bronze to Silver to Gold preprocessing", "Pipeline Active"),
-        platform_hero(
-            "preprocessing-cv",
-            "Remote Airflow Orchestration",
-            "Preprocessing",
-            "Workbench",
-            "Route one registered MLS dataset through the v9 medallion workflow, monitor Airflow live, verify Silver outputs in B2, and prepare Gold blocks for training.",
-            [
-                ("Flow", "Bronze -> Silver -> Gold"),
-                ("DAG", AIRFLOW_PREPROCESSING_DAG_ID or AIRFLOW_DAG_ID),
-                ("Controller", "Dash only"),
+
+        # ── Topbar ────────────────────────────────────────────────────────
+        html.Div(
+            className="de-topbar",
+            children=[
+                html.Div(
+                    className="de-brand",
+                    children=[
+                        html.Span(className="de-brand-grid"),
+                        html.Div(
+                            [
+                                html.Div("LiDAR Platform", className="de-brand-title"),
+                                html.Div(
+                                    "Preprocessing · Airflow · Medallion Pipeline",
+                                    className="de-brand-subtitle",
+                                ),
+                            ],
+                            className="de-brand-copy",
+                        ),
+                    ],
+                ),
+                html.Div(
+                    [
+                        dcc.Link("Home", href="/", className="de-nav-link"),
+                        dcc.Link("Data Explorer", href="/data-explorer", className="de-nav-link"),
+                        dcc.Link("Preprocessing", href="/preprocessing", className="de-nav-link de-nav-link-active"),
+                        dcc.Link("Training", href="/training", className="de-nav-link"),
+                        dcc.Link("Postprocessing", href="/postprocessing", className="de-nav-link"),
+                        dcc.Link("Control", href="/control-panel", className="de-nav-link"),
+                    ],
+                    className="de-nav",
+                ),
+                html.Div(
+                    [html.Span(className="de-live-dot"), "Pipeline Active"],
+                    className="de-live-pill",
+                ),
             ],
-            "ops-hero-preprocessing",
         ),
-        html.Main(
-            [
-                html.Div(
-                    [
-                        step_item("01", "Dataset", "Select source, labels, and routing", "blue"),
-                        step_item("02", "Parameters", "Configure voxel, features, splits", "green"),
-                        step_item("03", "Execution", "Trigger and monitor Airflow", "purple"),
-                        step_item("04", "Outputs", "Verify Silver and preview Gold", "amber"),
-                    ],
-                    className="ops-stepper",
+
+        # ── Hero ──────────────────────────────────────────────────────────
+        html.Section(
+            className="de-hero",
+            children=[
+                html.Canvas(
+                    id="preprocessing-cv",
+                    **{"aria-label": "Preprocessing pipeline particle field"},
                 ),
                 html.Div(
                     [
-                        html.Section(
-                            [
-                                section_head("Step 01", "Dataset and Routing", "Choose the registry record, inspect source metadata, and route the job to the Windows Airflow workstation."),
-                                html.Div(
-                                    [
-                                        html.Div(
-                                            [
-                                                dbc.Label("Registered Dataset"),
-                                                dcc.Dropdown(id="preproc-dataset-dropdown", options=_dataset_options(), placeholder="Select a dataset from the registry", clearable=True),
-                                            ],
-                                            className="ops-field ops-field-wide",
-                                        ),
-                                        html.Div([dbc.Label("Dataset ID"), dbc.Input(id="preproc-dataset-id", placeholder="Example: toronto-1", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div([dbc.Label("Dataset Name"), dbc.Input(id="preproc-dataset-name", placeholder="Example: Toronto MLS", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div([dbc.Label("Label Field"), dbc.Input(id="preproc-label-field", value="class", placeholder="class or scalar_Label", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div([dbc.Label("Building Labels"), dbc.Input(id="preproc-building-labels", value="2", placeholder="Example: 2 or 4", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div([dbc.Label("Non-Building Labels"), dbc.Input(id="preproc-non-building-labels", value="1, 3, 4, 5, 6, 7, 8, 9", placeholder="Comma-separated raw class IDs", persistence=True, persistence_type="session")], className="ops-field ops-field-wide"),
-                                        html.Div([dbc.Label("Ignore Labels"), dbc.Input(id="preproc-ignore-labels", value="0", placeholder="Comma-separated raw class IDs", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Mode"),
-                                                dcc.Dropdown(
-                                                    id="preproc-mode",
-                                                    options=[
-                                                        {"label": "Training - labels required", "value": "train"},
-                                                        {"label": "Inference - labels optional", "value": "inference"},
-                                                    ],
-                                                    value="train",
-                                                    clearable=False,
-                                                ),
-                                            ],
-                                            className="ops-field",
-                                        ),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Execution Target"),
-                                                dcc.Dropdown(id="preproc-execution-target", options=build_compute_target_options(), value="any_gpu_worker", clearable=False, persistence=True, persistence_type="session"),
-                                            ],
-                                            className="ops-field ops-field-wide",
-                                        ),
-                                    ],
-                                    className="ops-field-grid",
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div([html.H3("Dataset Identity"), html.Div(id="preproc-dataset-summary")], className="ops-review-card"),
-                                        html.Div(
-                                            [
-                                                html.H3("Compute Health"),
-                                                html.Div(id="preproc-compute-health-grid", className="prep-node-grid ops-node-grid"),
-                                            ],
-                                            className="ops-review-card",
-                                        ),
-                                    ],
-                                    className="ops-review-grid",
-                                ),
-                            ],
-                            className="ops-panel ops-step-panel ops-panel-primary",
+                        html.Div(
+                            "Bronze → Silver → Gold · MLS Medallion Pipeline",
+                            className="de-eyebrow",
                         ),
-                        html.Section(
-                            [
-                                section_head("Step 02", "Parameter Configuration", "Every value below is reflected in the JSON conf sent to Airflow; no hidden sample settings are injected by Dash."),
-                                html.Div(
-                                    [
-                                        html.Div([dbc.Label("Preprocessing Version"), dbc.Input(id="preproc-version", value="prep_v001", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div([dbc.Label("Pipeline Version"), dbc.Input(id="preproc-pipeline-version", value=DEFAULT_PIPELINE_VERSION, persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Output Tier"),
-                                                dcc.Dropdown(
-                                                    id="preproc-output-tier",
-                                                    options=[
-                                                        {"label": "Silver and Gold", "value": "silver_and_gold"},
-                                                        {"label": "Silver only", "value": "silver_only"},
-                                                    ],
-                                                    value="silver_and_gold",
-                                                    clearable=False,
-                                                ),
-                                            ],
-                                            className="ops-field",
-                                        ),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Output Mode"),
-                                                dcc.Dropdown(
-                                                    id="preproc-output-mode",
-                                                    options=[
-                                                        {"label": "All model formats", "value": "all"},
-                                                        {"label": "Traditional blocks only", "value": "traditional"},
-                                                        {"label": "PTv3 / Pointcept only", "value": "ptv3"},
-                                                    ],
-                                                    value="all",
-                                                    clearable=False,
-                                                ),
-                                            ],
-                                            className="ops-field",
-                                        ),
-                                        html.Div([dbc.Label("B2 Silver Output Prefix"), dbc.Input(id="preproc-b2-output-prefix", placeholder="silver_preprocessed_data/<dataset>/<prep_version>", persistence=True, persistence_type="session")], className="ops-field ops-field-wide"),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Input Features"),
-                                                dbc.Checklist(
-                                                    id="preproc-input-features",
-                                                    options=[
-                                                        {"label": "XYZ", "value": "xyz"},
-                                                        {"label": "Intensity", "value": "intensity"},
-                                                        {"label": "RGB", "value": "rgb"},
-                                                        {"label": "Labels", "value": "labels"},
-                                                    ],
-                                                    value=["xyz", "intensity", "rgb", "labels"],
-                                                    inline=True,
-                                                    switch=True,
-                                                ),
-                                            ],
-                                            className="ops-field ops-field-wide",
-                                        ),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Label Mapping Mode"),
-                                                dcc.Dropdown(
-                                                    id="preproc-label-mode",
-                                                    options=[
-                                                        {"label": "Registry or raw numeric IDs", "value": "registry_or_raw_ids"},
-                                                        {"label": "Raw numeric IDs only", "value": "raw_numeric_ids"},
-                                                        {"label": "External XML/JSON map required", "value": "mapping_file_required"},
-                                                    ],
-                                                    value="registry_or_raw_ids",
-                                                    clearable=False,
-                                                ),
-                                            ],
-                                            className="ops-field",
-                                        ),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Coordinate Normalization"),
-                                                dcc.Dropdown(
-                                                    id="preproc-coordinate-normalization",
-                                                    options=[
-                                                        {"label": "Subtract coordinate offset", "value": "offset_subtract"},
-                                                        {"label": "Keep original coordinates", "value": "none"},
-                                                    ],
-                                                    value="offset_subtract",
-                                                    clearable=False,
-                                                ),
-                                            ],
-                                            className="ops-field",
-                                        ),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Split Strategy"),
-                                                dcc.Dropdown(
-                                                    id="preproc-split-strategy",
-                                                    options=[
-                                                        {"label": "Spatial segment split", "value": "segment_spatial"},
-                                                        {"label": "Tile-level split", "value": "tile_split"},
-                                                        {"label": "Existing split metadata", "value": "existing_split_metadata"},
-                                                    ],
-                                                    value="segment_spatial",
-                                                    clearable=False,
-                                                ),
-                                            ],
-                                            className="ops-field",
-                                        ),
-                                    ],
-                                    className="ops-field-grid",
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div([dbc.Label("Voxel Size (m)"), dbc.Input(id="preproc-voxel-size", type="number", value=0.02, step=0.01, min=0)], className="ops-field"),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Voxel Keep Strategy"),
-                                                dcc.Dropdown(
-                                                    id="preproc-voxel-strategy",
-                                                    options=[
-                                                        {"label": "Representative point", "value": "representative"},
-                                                        {"label": "Centroid mean", "value": "centroid"},
-                                                    ],
-                                                    value="representative",
-                                                    clearable=False,
-                                                ),
-                                            ],
-                                            className="ops-field",
-                                        ),
-                                        html.Div([dbc.Label("Block Size (m)"), dbc.Input(id="preproc-block-size", type="number", value=2.0, step=0.5)], className="ops-field"),
-                                        html.Div([dbc.Label("Points / Block"), dbc.Input(id="preproc-n-points", type="number", value=8192, step=1024)], className="ops-field"),
-                                        html.Div([dbc.Label("Max Train Blocks"), dbc.Input(id="preproc-max-blocks", type="number", value=8000, step=500)], className="ops-field"),
-                                        html.Div([dbc.Label("Val/Test Stride"), dbc.Input(id="preproc-stride", type="number", value=1.5, step=0.25)], className="ops-field"),
-                                        html.Div([dbc.Label("Split Gap (m)"), dbc.Input(id="preproc-split-gap", type="number", value=2.0, step=0.5)], className="ops-field"),
-                                        html.Div([dbc.Label("Min Building Ratio"), dbc.Input(id="preproc-min-bldg", type="number", value=0.01, step=0.005)], className="ops-field"),
-                                    ],
-                                    className="ops-field-grid ops-field-grid-four",
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div([dbc.Label("Total Segments"), dbc.Input(id="preproc-num-segments", type="number", value=DEFAULT_NUM_SEGMENTS, min=1, step=1)], className="ops-field"),
-                                        html.Div([dbc.Label("Train Segments"), dbc.Input(id="preproc-train-segments", type="number", value=DEFAULT_TRAIN_SEGMENTS, min=0, step=1)], className="ops-field"),
-                                        html.Div([dbc.Label("Val Segments"), dbc.Input(id="preproc-val-segments", type="number", value=DEFAULT_VAL_SEGMENTS, min=0, step=1)], className="ops-field"),
-                                        html.Div([dbc.Label("Test Segments"), dbc.Input(id="preproc-test-segments", type="number", value=DEFAULT_TEST_SEGMENTS, min=0, step=1)], className="ops-field"),
-                                        html.Div(id="preproc-segment-validation", className="ops-validation-badge"),
-                                    ],
-                                    className="ops-field-grid ops-segment-grid",
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div([dbc.Label("RandLA Overlap"), dbc.Input(id="preproc-randla-overlap", type="number", value=0.0, step=0.05, min=0, max=0.95)], className="ops-field"),
-                                        html.Div([dbc.Label("PTv3 Scene Length"), dbc.Input(id="preproc-ptv3-length", type="number", value=50.0, step=5)], className="ops-field"),
-                                        html.Div([dbc.Label("Workers"), dbc.Input(id="preproc-workers", type="number", min=1, max=64, value=24)], className="ops-field"),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Generated Features"),
-                                                dbc.Checklist(
-                                                    id="preproc-feature-flags",
-                                                    options=[
-                                                        {"label": "Compute normals", "value": "compute_normals"},
-                                                        {"label": "Include density", "value": "include_density"},
-                                                        {"label": "Write silver tier", "value": "write_silver"},
-                                                        {"label": "Save PLY previews", "value": "save_ply"},
-                                                        {"label": "Compress output", "value": "compress_output"},
-                                                    ],
-                                                    value=["compute_normals", "include_density", "write_silver", "save_ply"],
-                                                    inline=True,
-                                                    switch=True,
-                                                ),
-                                            ],
-                                            className="ops-field ops-field-wide",
-                                        ),
-                                    ],
-                                    className="ops-field-grid",
-                                ),
-                            ],
-                            className="ops-panel ops-step-panel",
+                        html.H1(
+                            ["Preprocessing", html.Br(), html.Em("Workspace")],
+                            className="de-hero-title",
                         ),
-                        html.Section(
-                            [
-                                section_head("Step 03", "MLOps and Airflow Execution", "Set tracking destinations, review the actual DAG conf, and keep live status polling outside the layout."),
-                                html.Div(
-                                    [
-                                        html.Div(
-                                            [
-                                                dbc.Label("MLflow Tracking URI"),
-                                                dbc.Input(id="preproc-mlflow-tracking-uri", value=DEFAULT_MLFLOW_TRACKING_URI, placeholder="./mlruns or http://mlflow-host:5000", persistence=True, persistence_type="session"),
-                                                html.A(dbc.Button("Open MLflow", id="preproc-open-mlflow-button", color="info", outline=True, size="sm", className="mt-2 w-100"), id="preproc-open-mlflow-link", href=mlflow_browser_url(DEFAULT_MLFLOW_TRACKING_URI), target="_blank", rel="noopener noreferrer"),
-                                            ],
-                                            className="ops-field",
-                                        ),
-                                        html.Div([dbc.Label("MLflow Experiment"), dbc.Input(id="preproc-mlflow-experiment", value="mls-preprocessing", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div([dbc.Label("DVC Remote"), dbc.Input(id="preproc-dvc-remote", value="b2remote", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div([dbc.Label("MLflow Run Name"), dbc.Input(id="preproc-mlflow-run-name", placeholder="Optional; defaults to dataset + run id", persistence=True, persistence_type="session")], className="ops-field"),
-                                        html.Div(
-                                            [
-                                                dbc.Label("Tracking Options"),
-                                                dbc.Checklist(
-                                                    id="preproc-mlops-flags",
-                                                    options=[
-                                                        {"label": "Log small MLflow artifacts", "value": "log_artifacts"},
-                                                        {"label": "Disable MLflow", "value": "disable_mlflow"},
-                                                    ],
-                                                    value=["log_artifacts"],
-                                                    inline=True,
-                                                    switch=True,
-                                                ),
-                                            ],
-                                            className="ops-field ops-field-wide",
-                                        ),
-                                    ],
-                                    className="ops-field-grid",
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div(
-                                            [
-                                                html.H3("Preprocessing Parameter Summary"),
-                                                dash_table.DataTable(
-                                                    id="preproc-parameter-summary-table",
-                                                    columns=[{"name": "Parameter", "id": "parameter"}, {"name": "Value", "id": "value"}],
-                                                    data=[],
-                                                    page_size=18,
-                                                    **_table_style(),
-                                                ),
-                                            ],
-                                            className="ops-review-card",
-                                        ),
-                                        html.Div(
-                                            [
-                                                html.H3("Bucket Contract"),
-                                                dash_table.DataTable(
-                                                    id="preproc-storage-table",
-                                                    columns=[{"name": "Role", "id": "role"}, {"name": "B2 Path", "id": "path"}],
-                                                    data=[],
-                                                    page_size=10,
-                                                    **_table_style(),
-                                                ),
-                                            ],
-                                            className="ops-review-card",
-                                        ),
-                                    ],
-                                    className="ops-review-grid",
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div([html.H3("Remote Command"), html.Pre(id="preproc-command-preview", className="lineage-box ops-code-box")], className="ops-review-card"),
-                                        html.Div([html.H3("Airflow DAG Run Conf"), html.Pre(id="preproc-payload-preview", className="lineage-box ops-code-box")], className="ops-review-card"),
-                                    ],
-                                    className="ops-review-grid",
-                                ),
-                                html.Div(
-                                    [
-                                        html.Div("Start Preprocessing sends this JSON to the remote Windows Airflow DAG. Dash only stores state and polls status.", className="ops-execution-note"),
-                                        dbc.ButtonGroup(
-                                            [
-                                                dbc.Button("Save Trigger Payload", id="preproc-save-payload-button", color="secondary", outline=True),
-                                                dbc.Button("Start Preprocessing", id="preproc-trigger-airflow-button", color="success"),
-                                            ],
-                                            className="ops-action-group",
-                                        ),
-                                    ],
-                                    className="ops-trigger-row",
-                                ),
-                                html.Div(id="preproc-action-message", className="mt-3"),
-                                html.Div(
-                                    [
-                                        html.H3("Live Airflow Status"),
-                                        html.Div(id="preproc-airflow-status-panel"),
-                                    ],
-                                    className="ops-review-card airflow-live-card",
-                                ),
-                            ],
-                            className="ops-panel ops-step-panel ops-panel-review",
+                        html.P(
+                            "Route registered MLS datasets through the v9 medallion workflow. "
+                            "Configure parameters, trigger remote Airflow runs, verify Silver outputs in B2, "
+                            "and unlock Gold model-ready blocks for training.",
+                            className="de-hero-copy",
                         ),
-                        html.Section(
+                        html.Div(
                             [
-                                section_head("Step 04", "B2 Verification and Layer Readiness", "Verify real Silver output files before analytics, then preview Gold as a planned contract unless B2 already contains the generated outputs."),
-                                html.Div(
-                                    [
-                                        dbc.Button("Verify Silver Outputs", id="preproc-verify-silver-button", color="info", outline=True),
-                                        html.Div(id="preproc-silver-verification-panel", className="mt-3"),
-                                    ],
-                                    className="ops-review-card",
+                                html.A(
+                                    "Open Workspace →",
+                                    href="#preproc-workspace",
+                                    className="de-primary-cta",
                                 ),
-                                html.Div(id="preproc-silver-layer-container"),
-                                html.Div(id="preproc-gold-layer-container"),
+                                dcc.Link(
+                                    "Data Explorer",
+                                    href="/data-explorer",
+                                    className="de-secondary-cta",
+                                ),
                             ],
-                            className="ops-stack",
+                            className="de-hero-actions",
                         ),
                     ],
-                    className="ops-stack",
+                    className="de-hero-content",
                 ),
             ],
-            className="ops-workspace",
+        ),
+
+        # ── Live stats strip ──────────────────────────────────────────────
+        html.Div(id="preproc-live-stats", className="de-live-stats"),
+
+        # ── Workspace ─────────────────────────────────────────────────────
+        html.Section(
+            id="preproc-workspace",
+            className="data-explorer-workspace",
+            children=[
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Div("Preprocessing", className="data-explorer-eyebrow"),
+                                html.H2("Medallion pipeline workspace"),
+                                html.P(
+                                    "Select a registered dataset from the sidebar, then move through "
+                                    "Dataset configuration, Parameters, Execution, "
+                                    "Silver verification, and Gold output readiness.",
+                                    className="mb-0",
+                                ),
+                            ],
+                            className="data-explorer-title",
+                        ),
+                    ],
+                    className="data-explorer-head",
+                ),
+                html.Div(
+                    [
+                        _preproc_sidebar(),
+                        html.Section(
+                            dbc.Tabs(
+                                [
+                                    dbc.Tab(label="Dataset", tab_id="dataset", children=_tab_dataset()),
+                                    dbc.Tab(label="Parameters", tab_id="parameters", children=_tab_parameters()),
+                                    dbc.Tab(label="Execute", tab_id="execute", children=_tab_execute()),
+                                    dbc.Tab(label="Silver", tab_id="silver", children=_tab_silver()),
+                                    dbc.Tab(label="Gold", tab_id="gold", children=_tab_gold()),
+                                ],
+                                id="preproc-tabs",
+                                active_tab="dataset",
+                                className="data-explorer-tabs",
+                            ),
+                            className="data-explorer-main",
+                        ),
+                    ],
+                    className="data-explorer-grid",
+                ),
+            ],
         ),
     ],
 )
+
+
+@callback(
+    Output("preproc-live-stats", "children"),
+    Input("preproc-dataset-refresh", "n_intervals"),
+)
+def refresh_preproc_stats(_):
+    try:
+        n_datasets = len(list_registered_datasets())
+    except Exception:
+        n_datasets = 0
+    run_dir = "data/airflow_preprocessing_requests"
+    try:
+        n_runs = (
+            len([f for f in os.listdir(run_dir) if f.endswith(".json") and "_dataset_config" not in f])
+            if os.path.isdir(run_dir)
+            else 0
+        )
+    except Exception:
+        n_runs = 0
+    airflow_ok = bool(AIRFLOW_BASE_URL)
+    return [
+        _stat_tile("Registered", str(n_datasets)),
+        _stat_tile("Runs Saved", str(n_runs)),
+        _stat_tile("Active DAG", "preprocessing"),
+        _stat_tile("Airflow", "connected" if airflow_ok else "local"),
+    ]
 
 
 @callback(
@@ -1031,6 +1225,20 @@ def apply_selected_dataset(dataset_id):
 
 
 @callback(
+    Output("preproc-dataset-id", "value", allow_duplicate=True),
+    Input("url", "search"),
+    prevent_initial_call=True,
+)
+def apply_query_dataset(search):
+    if not search:
+        raise PreventUpdate
+    dataset_id = (parse_qs(search.lstrip("?")).get("dataset_id") or [None])[0]
+    if not dataset_id:
+        raise PreventUpdate
+    return dataset_id
+
+
+@callback(
     Output("preproc-b2-output-prefix", "value"),
     Input("preproc-dataset-id", "value"),
     Input("preproc-version", "value"),
@@ -1054,12 +1262,11 @@ def update_dataset_summary(dataset_id):
 
 @callback(
     Output("preproc-compute-health-grid", "children"),
-    Output("preproc-execution-target", "options"),
     Input("preproc-compute-health-refresh", "n_intervals"),
 )
 def refresh_compute_health(_):
     statuses = check_compute_nodes()
-    return [_compute_node_card(item) for item in statuses], build_compute_target_options()
+    return [ops_service_health_card(item) for item in statuses]
 
 
 @callback(
@@ -1096,10 +1303,19 @@ def update_segment_validation_badge(mode, num_segments, train_segments, val_segm
 
 
 @callback(
+    Output("preproc-preflight-banner", "children"),
+    Output("preproc-preflight-banner", "className"),
+    Input("preproc-dataset-id", "value"),
+    Input("preproc-segment-validation", "className"),
+    Input("preproc-b2-output-prefix", "value"),
+)
+def update_preflight_banner(dataset_id, seg_class, b2_prefix):
+    return _preflight_banner(dataset_id, seg_class, b2_prefix)
+
+
+@callback(
     Output("preproc-storage-table", "data"),
     Output("preproc-parameter-summary-table", "data"),
-    Output("preproc-command-preview", "children"),
-    Output("preproc-payload-preview", "children"),
     Output("preproc-conf-store", "data"),
     *FORM_INPUTS,
 )
@@ -1107,11 +1323,9 @@ def update_preprocessing_preview(*values):
     try:
         conf = _build_conf_from_values(*values)
     except Exception as exc:
-        return [], [{"parameter": "configuration_error", "value": str(exc)}], "", "", None
+        return [], [{"parameter": "configuration_error", "value": str(exc)}], None
 
-    command = " \\\n  ".join(build_remote_command(conf))
-    payload = json.dumps(conf, indent=2)
-    return _storage_rows(conf["storage"]), _parameter_summary(conf), command, payload, conf
+    return _storage_rows(conf["storage"]), _parameter_summary(conf), conf
 
 
 @callback(
@@ -1120,16 +1334,17 @@ def update_preprocessing_preview(*values):
     Output("preproc-airflow-status-refresh", "disabled"),
     Input("preproc-save-payload-button", "n_clicks"),
     Input("preproc-trigger-airflow-button", "n_clicks"),
+    Input("preproc-quick-start-button", "n_clicks"),
     *_form_state_specs(),
     prevent_initial_call=True,
 )
-def handle_preprocessing_action(save_clicks, trigger_clicks, *values):
+def handle_preprocessing_action(save_clicks, trigger_clicks, quick_clicks, *values):
     dataset_id = values[0]
     if not dataset_id:
         return dbc.Alert("Select or enter a dataset ID before creating an Airflow run.", color="warning"), dash.no_update, True
 
     button_id = dash.ctx.triggered_id
-    if button_id not in {"preproc-save-payload-button", "preproc-trigger-airflow-button"}:
+    if button_id not in {"preproc-save-payload-button", "preproc-trigger-airflow-button", "preproc-quick-start-button"}:
         raise PreventUpdate
 
     split_blocker = _segment_split_blocker(values[6], values[24], values[25], values[26], values[27])
@@ -1142,14 +1357,6 @@ def handle_preprocessing_action(save_clicks, trigger_clicks, *values):
             payload, payload_path = persist_airflow_request(conf)
             return (
                 dbc.Alert([html.Strong("Trigger payload saved. "), html.Code(payload_path), html.Br(), "DAG run id: ", html.Code(payload["dag_run_id"])], color="success"),
-                dash.no_update,
-                True,
-            )
-
-        health_blocker = _compute_target_blocker(values[8])
-        if health_blocker:
-            return (
-                dbc.Alert([html.Strong("Compute target is not ready. "), health_blocker], color="warning"),
                 dash.no_update,
                 True,
             )
@@ -1200,18 +1407,51 @@ def poll_airflow_status(_ticks, dag_run):
 
 
 @callback(
+    Output("preproc-stepper", "children"),
+    Input("preproc-dataset-id", "value"),
+    Input("preproc-airflow-status-store", "data"),
+    Input("preproc-dag-run-store", "data"),
+    Input("preproc-silver-status-store", "data"),
+)
+def update_stepper(dataset_id, airflow_status, dag_run, silver_status):
+    return _preproc_stepper(dataset_id, airflow_status, dag_run, silver_status)
+
+
+@callback(
     Output("preproc-trigger-airflow-button", "disabled"),
     Output("preproc-trigger-airflow-button", "children"),
     Input("preproc-airflow-status-store", "data"),
     Input("preproc-dataset-id", "value"),
+    Input("preproc-segment-validation", "className"),
+    Input("preproc-b2-output-prefix", "value"),
 )
-def update_trigger_button(status, dataset_id):
+def update_trigger_button(status, dataset_id, seg_class, b2_prefix):
     if not dataset_id:
         return True, "Select Dataset First"
     state = (status or {}).get("state")
     if state in {"queued", "running", "scheduled"}:
         return True, "Preprocessing Running"
+    if "ops-validation-badge-danger" in (seg_class or ""):
+        return True, "Fix Segment Split"
+    if not _normalize_prefix(b2_prefix):
+        return True, "Set B2 Prefix"
     return False, "Start Preprocessing"
+
+
+@callback(
+    Output("preproc-quick-start-button", "disabled"),
+    Output("preproc-quick-start-button", "children"),
+    Output("preproc-quick-start-hint", "children"),
+    Input("preproc-dataset-id", "value"),
+    Input("preproc-airflow-status-store", "data"),
+)
+def update_quick_start_button(dataset_id, status):
+    if not dataset_id:
+        return True, "Start Preprocessing", "Select a dataset to enable quick-start with default parameters"
+    state = (status or {}).get("state")
+    if state in {"queued", "running", "scheduled"}:
+        return True, "Preprocessing Running", f"DAG is {state} — wait for it to finish before starting another run"
+    return False, "Start Preprocessing", f"Trigger lidar_preprocessing_pipeline for dataset: {dataset_id}"
 
 
 @callback(
@@ -1255,5 +1495,6 @@ def render_output_layers(silver_status, dataset_id, prep_version, b2_prefix):
     silver_payload = load_local_or_b2_silver_metadata(dataset_id, prefix)
     readiness = compute_silver_readiness(silver_status, silver_payload)
     silver = build_silver_layer_section(dataset_id, prep_version, prefix, silver_status, silver_payload)
-    gold = build_gold_layer_section(dataset_id, prep_version, readiness)
+    gold_payload = load_gold_metadata_if_available(dataset_id, prep_version)
+    gold = build_gold_layer_section(dataset_id, prep_version, readiness, gold_payload=gold_payload)
     return silver, gold

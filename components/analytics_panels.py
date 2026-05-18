@@ -89,6 +89,10 @@ def _default_table_style():
     }
 
 
+def empty_state_mount(component_id):
+    return html.Div(id=component_id, className="analytics-empty-state")
+
+
 def attribute_analytics_panel():
     table_style = _default_table_style()
 
@@ -103,6 +107,8 @@ def attribute_analytics_panel():
                         "are treated as one semantic_label attribute.",
                         className="text-muted",
                     ),
+
+                    empty_state_mount("attribute-empty-state"),
 
                     dash_table.DataTable(
                         id="attribute-table",
@@ -145,6 +151,8 @@ def label_distribution_panel():
 
                     html.H5("Binary Building vs Non-building Distribution"),
 
+                    empty_state_mount("label-empty-state"),
+
                     dash_table.DataTable(
                         id="label-table",
                         columns=[
@@ -179,6 +187,8 @@ def label_distribution_panel():
                         "with the uploaded XML/JSON/YAML class mapping. For Toronto, scalar_Label is treated as semantic_label.",
                         className="text-muted",
                     ),
+
+                    empty_state_mount("class-label-empty-state"),
 
                     dash_table.DataTable(
                         id="class-label-table",
@@ -226,6 +236,8 @@ def spatial_summary_panel():
                         "Shows tile-wise point count, X/Y/Z ranges, density estimate, and spatial extent.",
                         className="text-muted",
                     ),
+
+                    empty_state_mount("spatial-empty-state"),
 
                     dash_table.DataTable(
                         id="spatial-table",
@@ -290,6 +302,7 @@ def rerun_viewer_panel():
                                         persistence=True,
                                         persistence_type="session",
                                     ),
+                                    html.Div(id="rerun-tile-state", className="mt-2"),
                                 ],
                                 xs=12,
                                 md=3,
@@ -399,7 +412,7 @@ def rerun_viewer_panel():
                         children=[
                             html.Br(),
                             dbc.Alert(
-                                "Rerun generation is not connected yet. The callback should call services/rerun_service.py and create an .rrd file from real PLY/LAS fields.",
+                                "Select a dataset, choose one tile, then generate a Rerun recording from real PLY/LAS fields.",
                                 color="info",
                             ),
                         ],

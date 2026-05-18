@@ -394,7 +394,7 @@ def get_backend_status_cards():
 
 
 def get_pipeline_task_statuses(dag_run_id: str) -> list:
-    """Return task instance list for an mls_preprocessing_v9 DAG run."""
+    """Return task instance list for the configured preprocessing DAG run."""
     from services.preprocessing_service import AIRFLOW_DAG_ID
     try:
         payload = _get_json(
@@ -419,4 +419,3 @@ def get_dag_run_state(dag_run_id: str) -> str:
         return payload.get("state") or "unknown"
     except Exception:
         return "unknown"
-

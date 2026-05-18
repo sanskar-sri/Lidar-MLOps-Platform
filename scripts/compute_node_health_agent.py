@@ -5,7 +5,12 @@ import os
 import platform
 import shutil
 import subprocess
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+_REFRESH_INTERVAL = float(os.getenv("METRICS_REFRESH_INTERVAL", "3"))
 
 
 def _run(command, timeout=3):
@@ -249,6 +254,37 @@ def build_payload():
     }
 
 
+# ---------------------------------------------------------------------------
+# Background metrics cache — refreshes every METRICS_REFRESH_INTERVAL seconds
+# so HTTP requests return instantly instead of blocking on nvidia-smi / psutil.
+# ---------------------------------------------------------------------------
+
+class _MetricsCache:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._payload = None
+
+    def get(self):
+        with self._lock:
+            return self._payload
+
+    def set(self, payload):
+        with self._lock:
+            self._payload = payload
+
+
+_cache = _MetricsCache()
+
+
+def _refresh_loop():
+    while True:
+        try:
+            _cache.set(build_payload())
+        except Exception:
+            pass
+        time.sleep(_REFRESH_INTERVAL)
+
+
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path not in {"/", "/health"}:
@@ -256,7 +292,13 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        body = json.dumps(build_payload(), indent=2).encode("utf-8")
+        payload = _cache.get()
+        if payload is None:
+            # Should not happen after startup pre-warm, but guard anyway.
+            payload = build_payload()
+            _cache.set(payload)
+
+        body = json.dumps(payload, indent=2).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -272,6 +314,13 @@ def main():
     parser.add_argument("--host", default=os.getenv("HEALTH_AGENT_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.getenv("HEALTH_AGENT_PORT", "8899")))
     args = parser.parse_args()
+
+    print("Collecting initial metrics...", flush=True)
+    _cache.set(build_payload())
+
+    t = threading.Thread(target=_refresh_loop, daemon=True)
+    t.start()
+    print(f"Metrics refreshing every {_REFRESH_INTERVAL:.0f}s in background.", flush=True)
 
     server = ThreadingHTTPServer((args.host, args.port), HealthHandler)
     print(f"Compute health agent listening on http://{args.host}:{args.port}/health", flush=True)

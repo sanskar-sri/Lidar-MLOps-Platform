@@ -214,7 +214,7 @@ def _status(node, state, detail, tone, payload=None):
     }
 
 
-def check_compute_node(node, timeout_seconds=3):
+def check_compute_node(node, timeout_seconds=8):
     if not node.get("health_url"):
         return _status(
             node,

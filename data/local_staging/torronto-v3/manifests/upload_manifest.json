@@ -1,0 +1,29 @@
+{
+    "dataset_id": "torronto-v3",
+    "dataset_name": "torronto-v3",
+    "uploaded_at": "2026-05-17T22:10:37.990158",
+    "bucket": "Building-Identification-MLS",
+    "raw_tile_prefix": "bronze_raw_data/torronto-v3/source_files/tiles/",
+    "label_map_prefix": "bronze_raw_data/torronto-v3/source_files/label_maps/",
+    "manifest_prefix": "bronze_raw_data/torronto-v3/manifests/",
+    "files": [
+        {
+            "file_name": "L001.ply",
+            "b2_path": "bronze_raw_data/torronto-v3/source_files/tiles/L001.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 927388830,
+            "uploaded_at": "2026-05-17T22:07:52.887657",
+            "verified_in_b2": true
+        },
+        {
+            "file_name": "L002.ply",
+            "b2_path": "bronze_raw_data/torronto-v3/source_files/tiles/L002.ply",
+            "file_role": "point_cloud_tile",
+            "format": "ply",
+            "file_size_bytes": 442203833,
+            "uploaded_at": "2026-05-17T22:09:37.944243",
+            "verified_in_b2": true
+        }
+    ]
+}

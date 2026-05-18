@@ -1,0 +1,28 @@
+{
+  "pipeline_version": "v9_airflow_compat",
+  "pointcept_layout": "default_dataset",
+  "required_arrays": [
+    "coord.npy",
+    "color.npy",
+    "strength.npy",
+    "normal.npy",
+    "segment.npy",
+    "instance.npy",
+    "KDTree.pkl",
+    "proj_idx.pkl",
+    "meta.json"
+  ],
+  "optional_arrays": [
+    "height.npy",
+    "coord.kdtree.pkl",
+    "blocks.npz"
+  ],
+  "pointnet_block_index": "blocks.npz stores ragged point indices as offsets + point_indices",
+  "dash_airflow_cli_compatible": true,
+  "parameters": {
+    "voxel_size": 0.02,
+    "block_size": 20.0,
+    "n_points": 16384,
+    "output_mode": "all"
+  }
+}

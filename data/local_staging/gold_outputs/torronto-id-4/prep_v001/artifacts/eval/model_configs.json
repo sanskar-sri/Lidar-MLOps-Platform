@@ -1,0 +1,57 @@
+{
+  "feature_channels": [
+    "x",
+    "y",
+    "z",
+    "hag",
+    "intensity",
+    "nx",
+    "ny",
+    "nz",
+    "r_norm",
+    "g_norm",
+    "b_norm",
+    "density"
+  ],
+  "input_dim_C": 12,
+  "PointNet_pp_SSG": {
+    "input_dim": 12,
+    "npoint": 16384
+  },
+  "PointNet_pp_MSG": {
+    "input_dim": 12,
+    "npoint": 16384,
+    "msg_radii": [
+      0.1,
+      0.2,
+      0.4
+    ],
+    "msg_nsample": [
+      16,
+      32,
+      128
+    ],
+    "compatible": true,
+    "recommended_voxel_size": 0.02
+  },
+  "RandLA_Net": {
+    "input_dim": 12,
+    "num_points": 16384,
+    "sub_sampling_ratio": [
+      4,
+      4,
+      4,
+      4
+    ],
+    "k_n": 16
+  },
+  "PTv3_Pointcept": {
+    "strength_channels": [
+      "intensity_norm_0_1"
+    ],
+    "extra_arrays": [
+      "height.npy"
+    ],
+    "grid_size": 0.05
+  }
+}

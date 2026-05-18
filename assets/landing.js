@@ -5,11 +5,18 @@
  */
 
 (function () {
+    const CANVAS_IDS = ['lp-cv', 'data-explorer-cv', 'preprocessing-cv', 'training-cv', 'control-cv', 'postprocessing-cv'];
+
     function initLandingCanvas() {
-        const cv = document.querySelector(
-            '#lp-cv, #data-explorer-cv, #preprocessing-cv, #training-cv, #control-cv, #postprocessing-cv'
-        );
-        if (!cv) return false;
+        let started = false;
+        CANVAS_IDS.forEach(function (id) {
+            const canvas = document.getElementById(id);
+            if (canvas && initParticleField(canvas)) started = true;
+        });
+        return started;
+    }
+
+    function initParticleField(cv) {
         if (cv.dataset.lpStarted === '1') return true;
         cv.dataset.lpStarted = '1';
         if (typeof cv.getContext !== 'function') {

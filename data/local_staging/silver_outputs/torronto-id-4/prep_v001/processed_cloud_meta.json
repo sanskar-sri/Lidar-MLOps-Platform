@@ -1,0 +1,29 @@
+{
+  "dataset": "torronto-id-4",
+  "tier": "silver",
+  "pipeline_version": "v9_airflow_compat",
+  "prep_version": "prep_v001",
+  "num_points": 38162488,
+  "voxel_size": 0.02,
+  "voxel_keep_strategy": "representative",
+  "has_intensity": true,
+  "has_rgb": true,
+  "has_labels": true,
+  "has_normals": true,
+  "has_density": true,
+  "coord_offset_subtracted": [
+    627285.908996582,
+    4841948.969970703,
+    116.68900299072266
+  ],
+  "bbox_min": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "bbox_max": [
+    475.72198486328125,
+    1075.0360107421875,
+    54.573997497558594
+  ]
+}

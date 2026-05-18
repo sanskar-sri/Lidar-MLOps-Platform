@@ -94,23 +94,19 @@ def get_b2_bucket():
 # Utility functions
 # -------------------------------------------------------------------
 
-def calculate_sha1(file_path, chunk_size=1024 * 1024 * 16):
+def calculate_sha1(file_path, chunk_size=1024 * 1024 * 4):
     """
-    Calculate SHA-1 checksum in chunks.
-    This avoids loading large point cloud files fully into memory.
+    Calculate SHA-1 in 4 MB chunks using raw (unbuffered) I/O.
+    Unbuffered mode avoids Python's BufferedReader which can trigger EDEADLK
+    (errno 35 on Linux) when reading from macOS Docker VirtioFS/FUSE mounts.
     """
-
     sha1 = hashlib.sha1()
-
-    with open(file_path, "rb") as f:
+    with open(file_path, "rb", buffering=0) as f:
         while True:
             chunk = f.read(chunk_size)
-
             if not chunk:
                 break
-
             sha1.update(chunk)
-
     return sha1.hexdigest()
 
 
@@ -177,13 +173,37 @@ def get_b2_destination_path(dataset_id, local_file_path):
 # Standard upload functions
 # -------------------------------------------------------------------
 
+def _stage_host_file(src_path, suffix):
+    """
+    Copy a file from a Docker host-mount (e.g. /datasets/…) to a temp file
+    on the container's own filesystem before any SHA-1 or B2 SDK operations.
+
+    Uses subprocess cp so the copy runs in a fresh process with its own file
+    descriptors — this avoids the VirtioFS FUSE errno-35 (EDEADLK on Linux /
+    EAGAIN on macOS) that permanently breaks the parent process's fd table for
+    sequential reads off the mount after ~2 large files.
+    """
+    import subprocess
+    import tempfile
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir="/tmp")
+    tmp.close()
+    print(f"[STAGE] {src_path} -> {tmp.name}")
+    subprocess.run(["cp", "--", src_path, tmp.name], check=True, timeout=7200)
+    print(f"[STAGE] done ({os.path.getsize(tmp.name):,} bytes)")
+    return tmp.name
+
+
 def upload_local_file_to_b2_standard(dataset_id, local_file_path):
     """
     Upload one file to the standard bronze_raw_data structure.
 
-    This handles:
     - .ply/.las/.laz/.pts/.xyz/.txt/.csv -> source_files/tiles/
     - .xml/.json/.yaml/.yml             -> source_files/label_maps/
+
+    Files from Docker host mounts (/datasets/…) are staged to /tmp first so
+    that SHA-1 and the B2 SDK never read directly from the VirtioFS FUSE layer,
+    which breaks after 2 large sequential reads (errno 35 EDEADLK/EAGAIN).
     """
 
     if not dataset_id:
@@ -219,23 +239,37 @@ def upload_local_file_to_b2_standard(dataset_id, local_file_path):
     print(f"B2 path    : {b2_path}")
     print("=" * 80)
 
-    print("[SHA-1 STARTED]")
-    sha1_checksum = calculate_sha1(local_file_path)
-    print("[SHA-1 COMPLETED]")
-    print(f"SHA-1: {sha1_checksum}")
-    print("=" * 80)
+    # Stage to container-local /tmp before SHA-1 and B2 SDK reads.
+    staged_path = None
+    read_path = local_file_path
+    if local_file_path.startswith("/datasets"):
+        staged_path = _stage_host_file(local_file_path, ext)
+        read_path = staged_path
 
-    bucket = get_b2_bucket()
+    try:
+        print("[SHA-1 STARTED]")
+        sha1_checksum = calculate_sha1(read_path)
+        print("[SHA-1 COMPLETED]")
+        print(f"SHA-1: {sha1_checksum}")
+        print("=" * 80)
 
-    print("[B2 UPLOAD STARTED]")
-    print("Please wait. Large files may take time.")
-    print("=" * 80)
+        bucket = get_b2_bucket()
 
-    uploaded_file = bucket.upload_local_file(
-        local_file=local_file_path,
-        file_name=b2_path,
-        sha1_sum=sha1_checksum,
-    )
+        print("[B2 UPLOAD STARTED]")
+        print("Please wait. Large files may take time.")
+        print("=" * 80)
+
+        uploaded_file = bucket.upload_local_file(
+            local_file=read_path,
+            file_name=b2_path,
+            sha1_sum=sha1_checksum,
+        )
+    finally:
+        if staged_path:
+            try:
+                os.unlink(staged_path)
+            except Exception:
+                pass
 
     uploaded_file_id = safe_file_id(uploaded_file)
     uploaded_file_name = safe_file_name(uploaded_file) or b2_path

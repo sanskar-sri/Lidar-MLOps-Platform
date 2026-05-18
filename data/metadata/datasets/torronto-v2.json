@@ -1,0 +1,241 @@
+{
+    "dataset_id": "torronto-v2",
+    "dataset_name": "torronto-data",
+    "upload_mode": "folder_upload",
+    "description": "",
+    "created_at": "2026-05-17T21:56:24.375268",
+    "status": "registered",
+    "storage": {
+        "bucket": "Building-Identification-MLS",
+        "raw_tile_prefix": "bronze_raw_data/torronto-v2/source_files/tiles/",
+        "label_map_prefix": "bronze_raw_data/torronto-v2/source_files/label_maps/",
+        "manifest_prefix": "bronze_raw_data/torronto-v2/manifests/",
+        "metadata_path": "metadata/datasets/torronto-v2.json",
+        "analytics_path": "metadata_analytics/torronto-v2/"
+    },
+    "total_files": 2,
+    "total_points": 31850972,
+    "labels": "Available",
+    "label_maps": [],
+    "quality_flags": {
+        "missing_xyz": false,
+        "missing_label": false,
+        "missing_tile_label_column": false,
+        "missing_label_map": true,
+        "missing_intensity": false,
+        "missing_reflectance": false,
+        "missing_rgb": false,
+        "missing_origin": true,
+        "label_mapping_available": false,
+        "building_mapping_available": false,
+        "class_imbalance_high": true,
+        "large_file_warning": true,
+        "ready_for_training": true,
+        "ready_for_inference": true
+    },
+    "file_summaries": [
+        {
+            "filename": "L001.ply",
+            "file_format": "PLY",
+            "point_count": 21567172,
+            "x_min": 627285.908996582,
+            "x_max": 627555.5899963379,
+            "y_min": 4842694.429016113,
+            "y_max": 4843024.005981445,
+            "z_min": 130.0279998779297,
+            "z_max": 171.26300048828125,
+            "attributes": [
+                "x",
+                "y",
+                "z",
+                "red",
+                "green",
+                "blue",
+                "scalar_Intensity",
+                "scalar_GPSTime",
+                "scalar_ScanAngleRank",
+                "scalar_Label"
+            ],
+            "has_xyz": true,
+            "has_label": true,
+            "label_column": "scalar_Label",
+            "has_semantic_label": true,
+            "semantic_label_column": "scalar_Label",
+            "has_intensity": true,
+            "has_reflectance": true,
+            "has_rgb": true,
+            "has_origin": false,
+            "reflectance_column": "scalar_Intensity",
+            "intensity_column": "scalar_Intensity",
+            "xorigin_column": "",
+            "yorigin_column": "",
+            "zorigin_column": "",
+            "red_column": "red",
+            "green_column": "green",
+            "blue_column": "blue",
+            "label_unique_count": 9,
+            "label_min": "0.0",
+            "label_max": "8.0",
+            "label_histogram": {
+                "0": 347037,
+                "1": 11108072,
+                "2": 389485,
+                "3": 1403746,
+                "4": 6027932,
+                "5": 214652,
+                "6": 263980,
+                "7": 1724637,
+                "8": 87631
+            },
+            "intensity_min": 1.0,
+            "intensity_max": 255.0,
+            "reflectance_min": 1.0,
+            "reflectance_max": 255.0,
+            "b2_path": "bronze_raw_data/torronto-v2/source_files/tiles/L001.ply",
+            "b2_size_bytes": 927388830,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f20099cd83391b7a8_d20260517_m215200_c005_v0501029_t0055_u01779054720411"
+        },
+        {
+            "filename": "L002.ply",
+            "file_format": "PLY",
+            "point_count": 10283800,
+            "x_min": 627373.4479980469,
+            "x_max": 627631.6730041504,
+            "y_min": 4842409.428009033,
+            "y_max": 4842804.596984863,
+            "z_min": 116.68900299072266,
+            "z_max": 161.2969970703125,
+            "attributes": [
+                "x",
+                "y",
+                "z",
+                "red",
+                "green",
+                "blue",
+                "scalar_Intensity",
+                "scalar_GPSTime",
+                "scalar_ScanAngleRank",
+                "scalar_Label"
+            ],
+            "has_xyz": true,
+            "has_label": true,
+            "label_column": "scalar_Label",
+            "has_semantic_label": true,
+            "semantic_label_column": "scalar_Label",
+            "has_intensity": true,
+            "has_reflectance": true,
+            "has_rgb": true,
+            "has_origin": false,
+            "reflectance_column": "scalar_Intensity",
+            "intensity_column": "scalar_Intensity",
+            "xorigin_column": "",
+            "yorigin_column": "",
+            "zorigin_column": "",
+            "red_column": "red",
+            "green_column": "green",
+            "blue_column": "blue",
+            "label_unique_count": 9,
+            "label_min": "0.0",
+            "label_max": "8.0",
+            "label_histogram": {
+                "0": 296282,
+                "1": 6305463,
+                "2": 296140,
+                "3": 1921653,
+                "4": 883714,
+                "5": 85041,
+                "6": 154246,
+                "7": 323003,
+                "8": 18258
+            },
+            "intensity_min": 1.0,
+            "intensity_max": 255.0,
+            "reflectance_min": 1.0,
+            "reflectance_max": 255.0,
+            "b2_path": "bronze_raw_data/torronto-v2/source_files/tiles/L002.ply",
+            "b2_size_bytes": 442203833,
+            "b2_file_id": "4_ze885a75d8a6fb4e493d50014_f20021efcf0e31f79_d20260517_m215403_c005_v0501005_t0001_u01779054843753"
+        }
+    ],
+    "readiness_checks": [
+        {
+            "check": "XYZ present",
+            "status": "Pass",
+            "message": "XYZ coordinates are available."
+        },
+        {
+            "check": "Point count readable",
+            "status": "Pass",
+            "message": "Total points detected: 31,850,972"
+        },
+        {
+            "check": "File format supported",
+            "status": "Pass",
+            "message": "The uploaded point cloud format was readable."
+        },
+        {
+            "check": "Spatial bounds valid",
+            "status": "Pass",
+            "message": "XYZ bounding boxes were extracted from the uploaded tiles."
+        },
+        {
+            "check": "Reflectance / intensity available",
+            "status": "Pass",
+            "message": "Reflectance or intensity field is available."
+        },
+        {
+            "check": "Scanner origin fields available",
+            "status": "Warning",
+            "message": "Scanner origin fields were not detected."
+        },
+        {
+            "check": "RGB available",
+            "status": "Pass",
+            "message": "RGB color fields are available."
+        },
+        {
+            "check": "Semantic label column present",
+            "status": "Pass",
+            "message": "Semantic label column was detected in the point cloud tile."
+        },
+        {
+            "check": "Label mapping file available",
+            "status": "Warning",
+            "message": "No XML/JSON/YAML label mapping file was found."
+        },
+        {
+            "check": "Building class mapping present",
+            "status": "Warning",
+            "message": "Building class mapping was not detected."
+        },
+        {
+            "check": "Ready for supervised training preprocessing",
+            "status": "Pass",
+            "message": "Dataset is ready for supervised training preprocessing."
+        }
+    ],
+    "model_compatibility": [
+        {
+            "model": "PointNet++",
+            "required_format": "traditional/blocks/",
+            "status": "Not generated"
+        },
+        {
+            "model": "PointNet++ MSG",
+            "required_format": "traditional/blocks/",
+            "status": "Not generated"
+        },
+        {
+            "model": "RandLA-Net",
+            "required_format": "traditional/blocks/",
+            "status": "Not generated"
+        },
+        {
+            "model": "PTv3",
+            "required_format": "ptv3_pointcept/",
+            "status": "Not generated"
+        }
+    ],
+    "metadata_cloud_upload_status": "uploaded",
+    "metadata_cloud_upload_error": ""
+}

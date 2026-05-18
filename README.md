@@ -17,8 +17,8 @@ defines the current storage and execution contract:
 2. Metadata profiling:
    dataset registry JSON and analytics parquet files are produced under
    `metadata/` and `metadata_analytics/<dataset_id>/`.
-3. Remote Airflow v9 preprocessing:
-   Dash builds the payload for `mls_preprocessing_v9`; the workstation stages
+3. Remote Airflow preprocessing:
+   Dash builds the payload for `lidar_preprocessing_pipeline`; the workstation stages
    bronze inputs and runs `preprocess_mls_v9_compat.py`.
 4. Silver conformed cloud:
    `silver_preprocessed_data/<dataset_id>/<prep_version>/` stores the

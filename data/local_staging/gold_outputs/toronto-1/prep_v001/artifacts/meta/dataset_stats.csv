@@ -1,0 +1,4 @@
+dataset,split,num_scenes,num_points,building_points,building_ratio
+toronto-1,test,4,6736413,2276772,0.33798
+toronto-1,train,16,27104774,4591059,0.169382
+toronto-1,val,4,4105154,674283,0.164253

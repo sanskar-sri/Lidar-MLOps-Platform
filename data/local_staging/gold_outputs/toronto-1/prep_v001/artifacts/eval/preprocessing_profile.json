@@ -1,0 +1,27 @@
+{
+  "stages": [
+    {
+      "stage": "msg_radius_check",
+      "wall_s": 0.0,
+      "delta_ram_mb": 0.0
+    },
+    {
+      "stage": "trajectory_split",
+      "wall_s": 1.84,
+      "delta_ram_mb": 146.2
+    },
+    {
+      "stage": "ptv3_output",
+      "wall_s": 38.682,
+      "delta_ram_mb": 2042.0
+    },
+    {
+      "stage": "traditional_blocks",
+      "wall_s": 146.845,
+      "delta_ram_mb": 543.1
+    }
+  ],
+  "total_wall_s": 187.37,
+  "peak_gpu_vram_mb": 1465.6,
+  "determinism": "not_run"
+}

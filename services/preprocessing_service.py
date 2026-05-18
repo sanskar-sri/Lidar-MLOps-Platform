@@ -23,7 +23,7 @@ REMOTE_SCRIPT_PATH = os.getenv(
     "REMOTE_PREPROCESSING_SCRIPT_PATH",
     "/opt/mls_preprocessing_airflow/preprocess_mls_v9_compat.py",
 )
-AIRFLOW_DAG_ID = os.getenv("AIRFLOW_PREPROCESSING_DAG_ID", "mls_preprocessing_v9")
+AIRFLOW_DAG_ID = os.getenv("AIRFLOW_PREPROCESSING_DAG_ID", "lidar_preprocessing_pipeline")
 AIRFLOW_API_BASE_URL = os.getenv("AIRFLOW_API_BASE_URL", "")
 AIRFLOW_USERNAME = os.getenv("AIRFLOW_USERNAME", "")
 AIRFLOW_PASSWORD = os.getenv("AIRFLOW_PASSWORD", "")
