@@ -370,7 +370,7 @@ def log_points3d_chunked(
         )
         return 1
 
-    axis = int(np.argmax(np.ptp(xyz, axis=0)))
+    axis = int(np.argmax(xyz.max(axis=0) - xyz.min(axis=0)))
     order = np.argsort(xyz[:, axis], kind="quicksort")
 
     for part_idx, point_idx in enumerate(np.array_split(order, chunk_count)):

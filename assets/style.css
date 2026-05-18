@@ -615,180 +615,6 @@ pre {
     line-height: 1;
 }
 
-.control-page {
-    min-width: 0;
-}
-
-.control-section-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-}
-
-.control-refreshed {
-    color: var(--app-muted);
-    font-size: 12px;
-    font-weight: 500;
-    text-align: right;
-}
-
-.control-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-}
-
-.control-grid-single {
-    grid-template-columns: 1fr;
-}
-
-.control-card {
-    min-width: 0;
-    background: #101419;
-    border: 1px solid var(--app-border-soft);
-    border-radius: 8px;
-    padding: 16px;
-}
-
-.control-card-top,
-.control-card-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.control-card-top {
-    justify-content: space-between;
-    gap: 16px;
-}
-
-.control-card-title {
-    color: var(--app-text);
-    font-size: 15px;
-    font-weight: 760;
-}
-
-.control-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 999px;
-    flex: 0 0 auto;
-}
-
-.control-dot-connected {
-    background: var(--app-success);
-    box-shadow: 0 0 0 4px rgba(93, 211, 158, 0.13);
-}
-
-.control-dot-warning {
-    background: var(--app-warning);
-    box-shadow: 0 0 0 4px rgba(242, 184, 75, 0.13);
-}
-
-.control-dot-offline {
-    background: var(--app-danger);
-    box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.13);
-}
-
-.control-state {
-    font-size: 20px;
-    font-weight: 780;
-    line-height: 1.15;
-    text-align: right;
-}
-
-.control-state-connected {
-    color: var(--app-success);
-}
-
-.control-state-warning {
-    color: var(--app-warning);
-}
-
-.control-state-offline {
-    color: var(--app-danger);
-}
-
-.control-detail {
-    color: var(--app-muted);
-    font-size: 13px;
-    line-height: 1.45;
-    margin-top: 12px;
-    min-height: 38px;
-    overflow-wrap: anywhere;
-}
-
-.control-metrics {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 14px;
-}
-
-.control-metrics-compact {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.control-metric {
-    min-width: 0;
-    background: rgba(255, 255, 255, 0.035);
-    border: 1px solid var(--app-border-soft);
-    border-radius: 8px;
-    padding: 11px;
-}
-
-.control-metric-label {
-    color: var(--app-muted);
-    font-size: 10px;
-    font-weight: 780;
-    text-transform: uppercase;
-}
-
-.control-metric-value {
-    color: var(--app-text);
-    font-size: 16px;
-    font-weight: 800;
-    line-height: 1.2;
-    margin-top: 5px;
-    overflow-wrap: anywhere;
-}
-
-.control-metric-detail {
-    color: var(--app-muted);
-    font-size: 11px;
-    line-height: 1.25;
-    margin-top: 4px;
-    overflow-wrap: anywhere;
-}
-
-.control-kv-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 14px;
-    margin-top: 14px;
-}
-
-.control-kv {
-    min-width: 0;
-    display: flex;
-    gap: 8px;
-    color: var(--app-muted);
-    font-size: 11px;
-    line-height: 1.35;
-}
-
-.control-kv-label {
-    flex: 0 0 auto;
-    color: #cbd5df;
-    font-weight: 760;
-}
-
-.control-kv-value {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
 .form-check-input:checked {
     background-color: var(--app-accent);
     border-color: var(--app-accent);
@@ -813,23 +639,6 @@ pre {
         grid-template-columns: 1fr;
     }
 
-    .control-section-head,
-    .control-card-top {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .control-refreshed,
-    .control-state {
-        text-align: left;
-    }
-
-    .control-grid,
-    .control-metrics,
-    .control-metrics-compact,
-    .control-kv-grid {
-        grid-template-columns: 1fr;
-    }
 }
 
 
@@ -838,18 +647,18 @@ pre {
    ═══════════════════════════════════════════════════════════════════ */
 
 .control-page {
-    --control-bg: #080d14;
-    --control-panel: #0f1722;
-    --control-panel-2: #131f2d;
-    --control-border: rgba(148, 163, 184, 0.16);
-    --control-border-strong: rgba(79, 179, 255, 0.32);
-    --control-text: #edf2f7;
-    --control-muted: #8ea0b4;
-    --control-soft: #53657a;
-    --control-cyan: #4fb3ff;
-    --control-green: #5dd39e;
-    --control-amber: #f2b84b;
-    --control-red: #ff6b6b;
+    --control-bg: var(--ops-bg);
+    --control-panel: var(--ops-panel);
+    --control-panel-2: var(--ops-panel-2);
+    --control-border: var(--ops-border);
+    --control-border-strong: var(--ops-border-strong);
+    --control-text: var(--ops-text);
+    --control-muted: var(--ops-muted);
+    --control-soft: #7d8ca0;
+    --control-cyan: var(--ops-cyan);
+    --control-green: var(--ops-green);
+    --control-amber: var(--ops-amber);
+    --control-red: var(--ops-red);
     min-width: 0;
     position: relative;
     overflow: hidden;
@@ -3212,7 +3021,7 @@ pre {
     z-index: 0;
     width: 100%;
     height: 100%;
-    pointer-events: auto;
+    pointer-events: none;
     background:
         radial-gradient(circle at 18% 28%, rgba(79, 179, 255, 0.28) 0 1px, transparent 2px),
         radial-gradient(circle at 68% 22%, rgba(0, 229, 160, 0.22) 0 1px, transparent 2px),
@@ -3622,6 +3431,31 @@ pre {
     padding: 0;
 }
 
+.app-shell:has(.preprocessing-page),
+.app-shell:has(.training-page),
+.app-shell:has(.control-page) {
+    min-height: 100vh;
+    background: var(--ops-bg, #05070d);
+}
+
+.app-shell:has(.preprocessing-page) .app-header,
+.app-shell:has(.preprocessing-page) .app-nav-strip,
+.app-shell:has(.training-page) .app-header,
+.app-shell:has(.training-page) .app-nav-strip,
+.app-shell:has(.control-page) .app-header,
+.app-shell:has(.control-page) .app-nav-strip {
+    display: none;
+}
+
+.app-shell:has(.preprocessing-page) .page-frame,
+.app-shell:has(.training-page) .page-frame,
+.app-shell:has(.control-page) .page-frame {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
 .ops-page {
     --ops-bg: #05070d;
     --ops-panel: rgba(15, 22, 34, 0.92);
@@ -3820,7 +3654,7 @@ pre {
     font-size: clamp(44px, 4.2vw, 68px);
     line-height: 1.08;
     font-weight: 800;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
     text-shadow: 0 14px 44px rgba(97, 184, 255, 0.18);
     animation: lpFadeUp 0.5s 0.08s ease both;
 }
@@ -3903,6 +3737,39 @@ pre {
     background: rgba(15, 22, 34, 0.76);
     border: 1px solid var(--ops-border);
     border-radius: 10px;
+    transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.ops-step-item:hover {
+    transform: translateY(-3px);
+    border-color: rgba(125, 180, 255, 0.36);
+    background: rgba(19, 29, 45, 0.88);
+}
+
+.ops-step-item-done .ops-step-index {
+    color: #061017;
+    background: var(--ops-green);
+}
+
+.ops-step-item-done .ops-step-index::after {
+    content: "✓";
+}
+
+.ops-step-item-done .ops-step-index {
+    font-size: 0;
+}
+
+.ops-step-item-done .ops-step-index::after {
+    font-size: 16px;
+}
+
+.ops-step-item-active .ops-step-index {
+    animation: stepPulse 1.8s ease infinite;
+}
+
+@keyframes stepPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(97, 184, 255, 0.35); }
+    50% { box-shadow: 0 0 0 8px rgba(97, 184, 255, 0); }
 }
 
 .ops-step-index {
@@ -4023,8 +3890,9 @@ pre {
 .ops-page .is-focused .Select-control {
     color: var(--ops-text);
     background: rgba(8, 14, 23, 0.96);
-    border-color: rgba(97, 184, 255, 0.52);
-    box-shadow: 0 0 0 3px rgba(97, 184, 255, 0.12);
+    border-color: rgba(97, 184, 255, 0.65) !important;
+    box-shadow: 0 0 0 4px rgba(97, 184, 255, 0.12) !important;
+    outline: none !important;
 }
 
 .ops-page .Select-placeholder,
@@ -4131,6 +3999,27 @@ pre {
     flex: 0 0 auto;
 }
 
+.ops-trigger-button.btn,
+.ops-trigger-button {
+    background: var(--ops-green);
+    border-color: rgba(85, 226, 167, 0.42);
+    color: #061017;
+    font-weight: 900;
+}
+
+.ops-trigger-button[disabled],
+.ops-trigger-button.btn:disabled {
+    background: var(--ops-amber);
+    border-color: rgba(240, 189, 85, 0.52);
+    color: #061017;
+    animation: triggerPulse 1.6s ease infinite;
+}
+
+@keyframes triggerPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(240, 189, 85, 0.4); }
+    50% { box-shadow: 0 0 0 10px rgba(240, 189, 85, 0); }
+}
+
 .ops-validation-badge {
     display: flex;
     align-items: center;
@@ -4157,6 +4046,29 @@ pre {
     color: #bfe4ff;
     background: rgba(97, 184, 255, 0.12);
     border: 1px solid rgba(97, 184, 255, 0.24);
+}
+
+.ops-preflight-banner {
+    display: flex;
+    flex: 1 1 320px;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 10px;
+    background: rgba(97, 184, 255, 0.08);
+    border: 1px solid rgba(97, 184, 255, 0.18);
+}
+
+.ops-preflight-banner-ok {
+    background: rgba(85, 226, 167, 0.08);
+    border-color: rgba(85, 226, 167, 0.22);
+}
+
+.ops-preflight-banner-warn {
+    background: rgba(240, 189, 85, 0.08);
+    border-color: rgba(240, 189, 85, 0.24);
 }
 
 .ops-segment-grid {
@@ -4203,6 +4115,21 @@ pre {
     border-color: rgba(97, 184, 255, 0.54);
     background: linear-gradient(135deg, rgba(97, 184, 255, 0.18), rgba(169, 140, 255, 0.1));
     box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
+}
+
+.training-model-title {
+    font-weight: 900;
+}
+
+.training-model-meta {
+    margin-top: 4px;
+    color: var(--ops-muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.training-model-chip {
+    margin-top: 8px;
 }
 
 .ops-model-block {
@@ -4336,10 +4263,29 @@ pre {
     margin-bottom: 12px;
 }
 
+.ops-page .progress,
 .airflow-progress {
     height: 9px;
     margin: 0 0 14px;
     background: rgba(125, 180, 255, 0.12);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.ops-page .progress-bar {
+    background: linear-gradient(90deg, var(--ops-cyan), var(--ops-green));
+    border-radius: inherit;
+    transition: width 0.5s ease;
+}
+
+.ops-page .progress-bar.progress-bar-striped.progress-bar-animated {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.06) 0,
+        rgba(255, 255, 255, 0.06) 10px,
+        transparent 10px,
+        transparent 20px
+    );
 }
 
 .airflow-progress-label {
@@ -4348,6 +4294,50 @@ pre {
     font-size: 12px;
     font-weight: 900;
 }
+
+.airflow-progress-label-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ops-muted);
+    font-family: "Space Mono", monospace;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.prep-task-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 4px 0 14px;
+}
+
+.prep-node-dot-connected {
+    animation: controlPulseGreen 1.8s ease-in-out infinite;
+}
+
+.prep-node-dot-warning {
+    animation: controlPulseAmber 1.8s ease-in-out infinite;
+}
+
+.ops-accent-top {
+    position: relative;
+    overflow: hidden;
+}
+
+.ops-accent-top::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    background: var(--ops-cyan);
+    opacity: 0.8;
+}
+
+.ops-accent-top-green::before { background: var(--ops-green); }
+.ops-accent-top-amber::before { background: var(--ops-amber); }
+.ops-accent-top-red::before { background: var(--ops-red); }
+.ops-accent-top-purple::before { background: var(--ops-purple); }
 
 .silver-layer-section,
 .gold-layer-section {
@@ -4557,13 +4547,13 @@ pre {
     padding: 0;
 }
 
-.control-page .control-hero-copy,
+.control-page .ops-hero-copy,
 .control-page .control-hero-actions {
     position: relative;
     z-index: 1;
 }
 
-.control-page .control-hero-copy {
+.control-page .ops-hero-copy {
     width: min(100% - 40px, 940px);
     margin: 0 auto;
     padding: 84px 0 72px;
@@ -4806,5 +4796,459 @@ pre {
         top: auto;
         justify-content: center;
         padding: 0 18px 30px;
+    }
+}
+
+/* ── Preprocessing page canvas ─────────────────────────────────────────── */
+
+#preprocessing-cv {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: auto;
+    background:
+        radial-gradient(circle at 22% 32%, rgba(242, 184, 75, 0.26) 0 1px, transparent 2px),
+        radial-gradient(circle at 74% 20%, rgba(160, 110, 255, 0.22) 0 1px, transparent 2px),
+        radial-gradient(circle at 48% 70%, rgba(79, 179, 255, 0.2) 0 1px, transparent 2px),
+        linear-gradient(90deg, transparent 0 40%, rgba(242, 184, 75, 0.16) 47%, rgba(160, 110, 255, 0.10) 53%, transparent 60%),
+        repeating-linear-gradient(108deg, transparent 0 36px, rgba(242, 184, 75, 0.06) 37px, transparent 38px);
+    background-position: 0 0, 0 0, 0 0, -180% 0, 0 0;
+    background-size: 150px 150px, 210px 210px, 180px 180px, 280% 100%, 100% 100%;
+    animation: lpCanvasBaseScan 4.5s linear infinite;
+}
+
+#preprocessing-cv.lp-cv-fallback {
+    background:
+        radial-gradient(circle at 20% 30%, rgba(242, 184, 75, 0.20) 0 1px, transparent 2px),
+        radial-gradient(circle at 70% 38%, rgba(160, 110, 255, 0.20) 0 1px, transparent 2px),
+        radial-gradient(circle at 50% 72%, rgba(79, 179, 255, 0.16) 0 1px, transparent 2px),
+        linear-gradient(90deg, transparent 0 45%, rgba(242, 184, 75, 0.13) 50%, transparent 55%),
+        repeating-linear-gradient(106deg, transparent 0 34px, rgba(242, 184, 75, 0.05) 35px, transparent 36px),
+        repeating-linear-gradient(0deg, transparent 0 32px, rgba(160, 110, 255, 0.04) 33px, transparent 34px);
+    background-size: 160px 160px, 220px 220px, 180px 180px, 280% 100%, 100% 100%, 100% 100%;
+    animation: lpFallbackScan 4.5s linear infinite;
+}
+
+/* ── Preprocessing tab content ─────────────────────────────────────────── */
+
+.preproc-tab-body {
+    padding: 24px 28px 32px;
+}
+
+.preproc-tab-head {
+    margin-bottom: 20px;
+}
+
+.preproc-tab-head h3 {
+    color: var(--de-text, #edf2f7);
+    font-family: "Sora", "DM Sans", sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 6px;
+}
+
+.preproc-tab-head p {
+    color: var(--de-muted, #9ca8b4);
+    font-size: 13px;
+    margin: 0;
+    line-height: 1.6;
+}
+
+.preproc-section-label {
+    font-family: "Space Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--de-cyan, #4fb3ff);
+    opacity: 0.86;
+    margin: 0 0 10px;
+}
+
+.preproc-tab-divider {
+    border: 0;
+    border-top: 1px solid rgba(125, 180, 255, 0.13);
+    margin: 0;
+}
+
+.preproc-tab-section {
+    margin-top: 24px;
+}
+
+/* ── Gold layer metrics ─────────────────────────────────────────────────── */
+
+.gold-split-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.gold-split-card {
+    background: var(--app-surface-2, #1b2127);
+    border: 1px solid rgba(125, 180, 255, 0.14);
+    border-radius: 10px;
+    padding: 16px 18px 14px;
+}
+
+.gold-split-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+    margin-top: 10px;
+}
+
+.gold-metric-pair {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.gold-metric-value {
+    font-family: "Space Mono", monospace;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--app-text, #edf2f7);
+    line-height: 1.1;
+}
+
+.gold-metric-label {
+    font-size: 10px;
+    color: var(--app-muted, #9ca8b4);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.gold-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.gold-info-card {
+    background: var(--app-surface-2, #1b2127);
+    border: 1px solid rgba(125, 180, 255, 0.14);
+    border-radius: 10px;
+    padding: 16px 18px;
+}
+
+.gold-card-title {
+    font-family: "Space Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--de-cyan, #4fb3ff);
+    opacity: 0.86;
+    margin-bottom: 10px;
+}
+
+.gold-model-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.gold-local-path {
+    font-family: "Space Mono", monospace;
+    font-size: 10px;
+    color: var(--app-muted, #9ca8b4);
+    margin-top: 8px;
+    word-break: break-all;
+}
+
+/* ── Training page (data-explorer layout variant) ──────────────────────── */
+
+/* Bridge ops CSS vars into the data-explorer-page scope */
+.data-explorer-page {
+    --ops-cyan: #4fb3ff;
+    --ops-green: #00e5a0;
+    --ops-purple: #b987ff;
+    --ops-amber: #f2b84b;
+    --ops-red: #ff6b6b;
+    --ops-text: #e8edf4;
+    --ops-muted: #8a9bb0;
+    --ops-panel: rgba(7, 9, 15, 0.80);
+    --ops-panel-2: rgba(7, 9, 15, 0.60);
+    --ops-border: rgba(79, 179, 255, 0.14);
+    --ops-border-strong: rgba(79, 179, 255, 0.34);
+}
+
+#training-cv {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background:
+        radial-gradient(circle at 22% 32%, rgba(185, 135, 255, 0.28) 0 1px, transparent 2px),
+        radial-gradient(circle at 74% 18%, rgba(79, 179, 255, 0.24) 0 1px, transparent 2px),
+        radial-gradient(circle at 48% 70%, rgba(93, 211, 158, 0.2) 0 1px, transparent 2px),
+        linear-gradient(90deg, transparent 0 42%, rgba(185, 135, 255, 0.16) 48%, rgba(79, 179, 255, 0.10) 52%, transparent 58%),
+        repeating-linear-gradient(108deg, transparent 0 36px, rgba(185, 135, 255, 0.06) 37px, transparent 38px);
+    background-position: 0 0, 0 0, 0 0, -180% 0, 0 0;
+    background-size: 150px 150px, 210px 210px, 180px 180px, 280% 100%, 100% 100%;
+    animation: lpCanvasBaseScan 5s linear infinite;
+}
+
+/* Step guide strip in training sidebar */
+.training-step-guide {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 14px 0;
+    padding: 12px;
+    background: rgba(79, 179, 255, 0.04);
+    border: 1px solid rgba(79, 179, 255, 0.10);
+    border-radius: 8px;
+}
+
+.training-step-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 4px;
+}
+
+.training-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    flex: 0 0 22px;
+    font-family: "Space Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: #05070d;
+}
+
+.training-step-num-blue  { background: #4fb3ff; }
+.training-step-num-green { background: #00e5a0; }
+.training-step-num-purple { background: #b987ff; }
+.training-step-num-amber  { background: #f2b84b; }
+
+.training-step-name {
+    display: block;
+    color: var(--de-text);
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.training-step-detail {
+    display: block;
+    color: var(--de-muted);
+    font-size: 10px;
+    line-height: 1.2;
+    margin-top: 1px;
+}
+
+/* Tab section heads */
+.training-tab-head {
+    padding: 20px 0 16px;
+    border-bottom: 1px solid var(--de-border);
+    margin-bottom: 22px;
+}
+
+.training-tab-head .de-eyebrow {
+    margin-bottom: 6px;
+}
+
+.training-tab-head h3 {
+    color: var(--de-text) !important;
+    font-size: 17px;
+    font-weight: 750;
+    margin: 0 0 6px;
+}
+
+.training-tab-head p {
+    color: var(--de-muted) !important;
+    font-size: 13px;
+    margin: 0;
+    line-height: 1.6;
+}
+
+/* Divider between parameter sections inside a tab */
+.training-tab-divider {
+    border: 0;
+    border-top: 1px solid rgba(79, 179, 255, 0.12);
+    margin: 28px 0;
+}
+
+/* ── Form controls inside data-explorer-page (match ops-page depth) ─────── */
+.data-explorer-page .form-control,
+.data-explorer-page .Select-control {
+    min-height: 42px !important;
+    color: var(--de-text) !important;
+    background: rgba(7, 9, 15, 0.78) !important;
+    border: 1px solid rgba(79, 179, 255, 0.18) !important;
+    border-radius: 8px !important;
+}
+
+.data-explorer-page .form-control:focus,
+.data-explorer-page .Select-control:focus,
+.data-explorer-page .is-focused .Select-control {
+    background: rgba(7, 9, 15, 0.96) !important;
+    border-color: rgba(79, 179, 255, 0.65) !important;
+    box-shadow: 0 0 0 4px rgba(79, 179, 255, 0.12) !important;
+}
+
+.data-explorer-page .Select-placeholder,
+.data-explorer-page .Select-value-label,
+.data-explorer-page .Select-input,
+.data-explorer-page .Select-input > input {
+    color: var(--de-text) !important;
+}
+
+.data-explorer-page .Select-menu-outer {
+    color: var(--de-text);
+    background: #0a1120;
+    border-color: rgba(79, 179, 255, 0.26);
+}
+
+.data-explorer-page .Select-option {
+    background: #0a1120 !important;
+    color: var(--de-text) !important;
+}
+
+.data-explorer-page .Select-option.is-focused,
+.data-explorer-page .Select-option:hover {
+    background: rgba(79, 179, 255, 0.10) !important;
+}
+
+.data-explorer-page .form-check-label {
+    color: var(--de-muted);
+    font-size: 12px;
+}
+
+/* Form labels scoped to the ops-field-grid and ops-model-block only */
+.data-explorer-page .ops-field-grid label,
+.data-explorer-page .ops-field-grid .form-label,
+.data-explorer-page .ops-model-block label,
+.data-explorer-page .ops-model-block .form-label,
+.data-explorer-page .ops-field label,
+.data-explorer-page .ops-field .form-label {
+    color: var(--de-muted);
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 5px;
+}
+
+/* Progress bar gradient in data-explorer-page */
+.data-explorer-page .progress {
+    height: 9px;
+    background: rgba(79, 179, 255, 0.12);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.data-explorer-page .progress-bar {
+    background: linear-gradient(90deg, var(--de-cyan), var(--de-green));
+    border-radius: inherit;
+    transition: width 0.5s ease;
+}
+
+.data-explorer-page .progress-bar.progress-bar-striped.progress-bar-animated {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.06) 0,
+        rgba(255, 255, 255, 0.06) 10px,
+        transparent 10px,
+        transparent 20px
+    );
+}
+
+/* Ops review cards inside data-explorer-page */
+.data-explorer-page .ops-review-card {
+    margin-top: 0;
+    background: rgba(7, 9, 15, 0.60);
+    border: 1px solid rgba(79, 179, 255, 0.12);
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.data-explorer-page .ops-review-grid {
+    gap: 16px;
+}
+
+/* Kill double-margin when ops-review-card is directly inside ops-review-grid */
+.data-explorer-page .ops-review-grid > .ops-review-card {
+    margin-top: 0;
+}
+
+/* ops-review-card h4 — Review tab uses h4 headings */
+.data-explorer-page .ops-review-card h4,
+.data-explorer-page .ops-review-card h3 {
+    color: var(--de-text) !important;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 14px;
+    opacity: 0.7;
+}
+
+/* ops-inline-title h4 (Review tab "Recent Training Jobs") */
+.data-explorer-page .ops-inline-title h4 {
+    margin: 0;
+    color: var(--de-text) !important;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+}
+
+/* ops-subpanel inside data-explorer-page */
+.data-explorer-page .ops-subpanel {
+    background: rgba(7, 9, 15, 0.50);
+    border: 1px solid rgba(79, 179, 255, 0.10);
+    border-radius: 10px;
+    padding: 18px;
+}
+
+/* Empty state inside data-explorer-page */
+.data-explorer-page .ops-empty-state {
+    border-color: rgba(79, 179, 255, 0.15);
+    background: rgba(79, 179, 255, 0.03);
+    border-radius: 8px;
+    padding: 18px;
+}
+
+.data-explorer-page .ops-empty-title {
+    color: var(--de-text);
+}
+
+.data-explorer-page .ops-empty-detail {
+    color: var(--de-muted);
+}
+
+/* Training job cards are read-only info cards — scoped to training-page-de only */
+.training-page-de .dataset-card-list .dataset-card {
+    cursor: default;
+    pointer-events: none;
+    transition: none;
+}
+
+.training-page-de .dataset-card-list .dataset-card:hover {
+    transform: none;
+    border-color: rgba(79, 179, 255, 0.12);
+    background: rgba(13, 17, 23, 0.84);
+}
+
+@media (max-width: 900px) {
+    .gold-split-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .gold-info-grid {
+        grid-template-columns: 1fr;
     }
 }

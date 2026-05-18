@@ -27,7 +27,7 @@ AIRFLOW_USERNAME = os.getenv("AIRFLOW_USERNAME", "").strip()
 AIRFLOW_PASSWORD = os.getenv("AIRFLOW_PASSWORD", "").strip()
 AIRFLOW_PREPROCESSING_DAG_ID = os.getenv(
     "AIRFLOW_PREPROCESSING_DAG_ID",
-    "mls_preprocessing_v9",
+    "lidar_preprocessing_pipeline",
 ).strip()
 
 B2_ENDPOINT_URL = os.getenv("B2_ENDPOINT_URL", "").strip()
@@ -67,12 +67,6 @@ EXPECTED_SILVER_OUTPUTS = [
         "candidates": ["silver_density_grid.parquet"],
         "required": True,
     },
-    {
-        "id": "silver_npz",
-        "label": "silver.npz",
-        "candidates": ["silver_npz/silver.npz", "silver.npz"],
-        "required": True,
-    },
 ]
 
 SILVER_DENSITY_REQUIRED_COLUMNS = {
@@ -85,18 +79,23 @@ SILVER_DENSITY_REQUIRED_COLUMNS = {
     "building_ratio",
 }
 
-GOLD_FOLDERS = ["blocks", "train", "val", "test", "eval", "meta"]
+GOLD_FOLDERS = [
+    "artifacts/eval",
+    "artifacts/meta",
+    "training/ptv3",
+    "training/traditional/blocks",
+]
 GOLD_SUPPORT_FILES = [
-    ("meta/preprocessing_contract.json", "preprocessing_contract.json"),
-    ("meta/dataset_stats.csv", "dataset_stats.csv"),
-    ("meta/label_map.json", "label_map.json"),
-    ("meta/splits.json", "splits.json"),
-    ("eval/split_stats.json", "split_stats.json"),
-    ("eval/density_report.json", "density_report.json"),
-    ("eval/model_configs.json", "model_configs.json"),
-    ("eval/preprocessing_profile.json", "preprocessing_profile.json"),
-    ("eval/site_boundary_map.json", "site_boundary_map.json"),
-    ("eval/class_weights.npy", "class_weights.npy"),
+    ("artifacts/meta/preprocessing_contract.json", "preprocessing_contract.json"),
+    ("artifacts/meta/dataset_stats.csv", "dataset_stats.csv"),
+    ("artifacts/meta/label_map.json", "label_map.json"),
+    ("artifacts/meta/splits.json", "splits.json"),
+    ("artifacts/eval/split_stats.json", "split_stats.json"),
+    ("artifacts/eval/density_report.json", "density_report.json"),
+    ("artifacts/eval/model_configs.json", "model_configs.json"),
+    ("artifacts/eval/preprocessing_profile.json", "preprocessing_profile.json"),
+    ("artifacts/eval/site_boundary_map.json", "site_boundary_map.json"),
+    ("artifacts/eval/class_weights.npy", "class_weights.npy"),
 ]
 
 
@@ -527,11 +526,41 @@ def _local_silver_dir(dataset_id, b2_prefix):
     return SILVER_LOCAL_CACHE_DIR / str(dataset_id or "dataset") / prep_version
 
 
+def _local_gold_dir(dataset_id, prep_version):
+    return GOLD_LOCAL_CACHE_DIR / str(dataset_id or "dataset") / str(prep_version or "prep_v001")
+
+
 def _read_local_json(path):
     if not path.exists():
         return None
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _read_local_csv(path):
+    if not path.exists():
+        return None
+    import csv
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _load_gold_artifact(local_path, b2_key, is_csv=False):
+    """Check local staging first; download from B2 to local staging if absent."""
+    reader = _read_local_csv if is_csv else _read_local_json
+    try:
+        data = reader(local_path)
+        if data is not None:
+            return {"data": data, "source": str(local_path), "error": ""}
+    except Exception as exc:
+        return {"data": None, "source": str(local_path), "error": str(exc)}
+    try:
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        download_b2_file_to_local(b2_key=b2_key, local_path=str(local_path))
+        data = reader(local_path)
+        return {"data": data, "source": str(local_path), "error": ""}
+    except Exception as exc:
+        return {"data": None, "source": b2_key, "error": str(exc)}
 
 
 def load_b2_json_file(b2_key):
@@ -576,19 +605,19 @@ def _load_local_or_b2_json(local_path, b2_key):
             return {"data": data, "source": str(local_path), "error": ""}
     except Exception as exc:
         return {"data": None, "source": str(local_path), "error": str(exc)}
-    loaded = load_b2_json_file(b2_key)
-    return {
-        "data": loaded.get("data"),
-        "source": loaded.get("b2_key"),
-        "error": loaded.get("error", ""),
-    }
+    try:
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        download_b2_file_to_local(b2_key=b2_key, local_path=str(local_path))
+        data = _read_local_json(local_path)
+        return {"data": data, "source": str(local_path), "error": ""}
+    except Exception as exc:
+        return {"data": None, "source": b2_key, "error": str(exc)}
 
 
 def _load_local_or_b2_parquet(local_path, b2_key):
     try:
         if local_path.exists():
             import pandas as pd
-
             return {
                 "data": pd.read_parquet(local_path),
                 "source": str(local_path),
@@ -598,13 +627,19 @@ def _load_local_or_b2_parquet(local_path, b2_key):
         return {"data": None, "source": str(local_path), "error": f"Parquet engine missing: {exc}"}
     except Exception as exc:
         return {"data": None, "source": str(local_path), "error": str(exc)}
-
-    loaded = load_b2_parquet_file(b2_key)
-    return {
-        "data": loaded.get("data"),
-        "source": loaded.get("b2_key"),
-        "error": loaded.get("error", ""),
-    }
+    try:
+        import pandas as pd
+    except Exception as exc:
+        return {"data": None, "source": b2_key, "error": f"pandas unavailable: {exc}"}
+    try:
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        download_b2_file_to_local(b2_key=b2_key, local_path=str(local_path))
+        frame = pd.read_parquet(local_path)
+        return {"data": frame, "source": str(local_path), "error": ""}
+    except ImportError as exc:
+        return {"data": None, "source": b2_key, "error": f"Parquet engine missing: {exc}"}
+    except Exception as exc:
+        return {"data": None, "source": b2_key, "error": str(exc)}
 
 
 def load_local_or_b2_silver_metadata(dataset_id, b2_prefix):
@@ -655,23 +690,34 @@ def load_local_or_b2_silver_metadata(dataset_id, b2_prefix):
     }
 
 
-def load_gold_metadata_if_available(dataset_id, prep_version, b2_prefix):
+def load_gold_metadata_if_available(dataset_id, prep_version, b2_prefix=None):
+    """Download gold artifacts to local staging on first load, then serve from disk."""
     prefix = _normalize_prefix(b2_prefix) or f"gold_model_ready_data/{dataset_id}/{prep_version}"
-    keys = {
-        "preprocessing_contract": _join_key(prefix, "meta/preprocessing_contract.json"),
-        "label_map": _join_key(prefix, "meta/label_map.json"),
-        "splits": _join_key(prefix, "meta/splits.json"),
-        "density_report": _join_key(prefix, "eval/density_report.json"),
-        "model_configs": _join_key(prefix, "eval/model_configs.json"),
-    }
+    local_dir = _local_gold_dir(dataset_id, prep_version)
+
+    artifacts = [
+        ("preprocessing_contract", "artifacts/meta/preprocessing_contract.json", False),
+        ("label_map",              "artifacts/meta/label_map.json",              False),
+        ("splits",                 "artifacts/meta/splits.json",                 False),
+        ("dataset_stats",          "artifacts/meta/dataset_stats.csv",           True),
+        ("split_stats",            "artifacts/eval/split_stats.json",            False),
+        ("density_report",         "artifacts/eval/density_report.json",         False),
+        ("model_configs",          "artifacts/eval/model_configs.json",          False),
+        ("preprocessing_profile",  "artifacts/eval/preprocessing_profile.json",  False),
+    ]
+
     payload = {}
     errors = {}
-    for name, key in keys.items():
-        result = load_b2_json_file(key)
+    sources = {}
+    for name, relative_path, is_csv in artifacts:
+        local_path = local_dir / relative_path
+        result = _load_gold_artifact(local_path, _join_key(prefix, relative_path), is_csv=is_csv)
         payload[name] = result.get("data")
+        sources[name] = result.get("source", "")
         if result.get("error"):
             errors[name] = result["error"]
-    return {"data": payload, "errors": errors, "prefix": prefix}
+
+    return {"data": payload, "errors": errors, "sources": sources, "prefix": prefix, "local_dir": str(local_dir)}
 
 
 def compute_silver_readiness(silver_verification, silver_payload):
@@ -681,10 +727,15 @@ def compute_silver_readiness(silver_verification, silver_payload):
     errors = (silver_payload or {}).get("errors") or {}
     density_df = (silver_payload or {}).get("density_df")
 
+    b2_verified = verification.get("status") == "passed"
+    data_available = bool(metadata) and bool(stats) and density_df is not None
+
     failed = []
-    if verification.get("status") != "passed":
+    # Only block on missing B2 artifacts when data couldn't be loaded from local cache either
+    if not b2_verified and not data_available:
         missing = ", ".join(verification.get("missing") or [])
-        failed.append(f"Missing B2 Silver artifacts: {missing or 'verification did not pass'}")
+        failed.append(f"Missing Silver artifacts: {missing or 'verification did not pass'}")
+
     if not metadata:
         failed.append(errors.get("metadata") or "processed_cloud_meta.json could not be loaded")
     if not stats:
@@ -716,4 +767,6 @@ def compute_silver_readiness(silver_verification, silver_payload):
         "status": status,
         "failed_checks": failed,
         "passed": status == "passed",
+        "b2_verified": b2_verified,
+        "data_available": data_available,
     }

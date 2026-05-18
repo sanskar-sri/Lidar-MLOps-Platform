@@ -1,14 +1,15 @@
-import re
 from datetime import datetime, timezone
 
 import dash
 from dash import Input, Output, callback, dcc, html
 
+from components.platform_theme import ops_service_health_card, ops_topbar
+from services.airflow_health_service import get_backend_status_cards
 from services.compute_nodes_service import COMPUTE_HEALTH_POLL_MS, check_compute_nodes
 from services.mlflow_service import check_mlflow_service
 
 
-dash.register_page(__name__, path="/control-panel", name="Control Panel")
+dash.register_page(__name__, path="/control-panel", name="Control Panel", title="Control Panel - LiDAR Platform")
 
 
 def _tone_slug(tone):
@@ -18,135 +19,6 @@ def _tone_slug(tone):
     if normalized in {"offline", "failed", "error"}:
         return "offline"
     return "warning"
-
-
-def _extract_percent(*values):
-    for value in values:
-        match = re.search(r"(\d+(?:\.\d+)?)\s*%", str(value or ""))
-        if match:
-            return max(0.0, min(100.0, float(match.group(1))))
-    return 0.0
-
-
-def _sparkline(percent):
-    seed = max(6, min(92, percent or 34))
-    heights = [
-        max(8, min(94, seed + delta))
-        for delta in [-14, -4, -9, 6, -2, 11, 4, -7, 9, 0]
-    ]
-    return html.Div(
-        [html.Span(style={"height": f"{height:.0f}%"}) for height in heights],
-        className="control-sparkline",
-    )
-
-
-def _metric_band(percent):
-    if percent >= 90:
-        return "offline"
-    if percent >= 75:
-        return "warning"
-    return "connected"
-
-
-def _metric_tile(metric):
-    label = metric.get("label", "")
-    value = metric.get("value", "")
-    detail = metric.get("detail", "")
-    percent = _extract_percent(value, detail)
-    band = _metric_band(percent)
-
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Div(label, className="control-metric-label"),
-                    html.Div(value, className="control-metric-value"),
-                ],
-                className="control-metric-head",
-            ),
-            html.Div(
-                html.Span(style={"width": f"{percent:.1f}%"}),
-                className=f"control-gauge control-gauge-{band}",
-            ),
-            html.Div(detail, className="control-metric-detail"),
-        ],
-        className=f"control-metric control-metric-{band}",
-        style={"--metric-pct": f"{percent:.1f}%"},
-    )
-
-
-def _kv(label, value, highlight=False):
-    return html.Div(
-        [
-            html.Span(label, className="control-kv-label"),
-            html.Span(value or "n/a", className="control-kv-value control-kv-highlight" if highlight else "control-kv-value"),
-        ],
-        className="control-kv",
-    )
-
-
-def _node_card(item):
-    tone = _tone_slug(item.get("tone"))
-    payload = item.get("payload") or {}
-    platform = payload.get("platform") or {}
-    checked_at = payload.get("checked_at") or payload.get("timestamp") or "not reported"
-    roles = ", ".join(item.get("roles") or [])
-    metrics = item.get("metrics") or []
-    platform_text = " ".join(
-        str(part)
-        for part in [
-            platform.get("system"),
-            platform.get("release"),
-            platform.get("machine"),
-        ]
-        if part
-    )
-
-    metric_content = (
-        [_metric_tile(metric) for metric in metrics]
-        if metrics
-        else [html.Div("Waiting for CPU, RAM, GPU, and VRAM telemetry.", className="control-empty-line")]
-    )
-
-    return html.Article(
-        [
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Span(className=f"control-dot control-dot-{tone}"),
-                            html.Div(
-                                [
-                                    html.H3(item.get("name") or item.get("id") or "Compute Node"),
-                                    html.Div(
-                                        f"queue: {item.get('airflow_queue') or item.get('id') or 'n/a'}",
-                                        className="control-node-queue",
-                                    ),
-                                ],
-                                className="control-title-stack",
-                            ),
-                        ],
-                        className="control-card-head",
-                    ),
-                    html.Div(item.get("state", "Unknown"), className=f"control-state control-state-{tone}"),
-                ],
-                className="control-card-top",
-            ),
-            html.Div(item.get("detail", ""), className="control-detail"),
-            html.Div(metric_content, className="control-metrics"),
-            html.Div(
-                [
-                    _kv("Roles", roles, highlight=True),
-                    _kv("Health URL", item.get("health_url")),
-                    _kv("Platform", platform_text),
-                    _kv("Python", platform.get("python")),
-                    _kv("Checked", checked_at),
-                ],
-                className="control-kv-grid",
-            ),
-        ],
-        className=f"control-card control-card-{tone}",
-    )
 
 
 def _summary_card(label, value, detail, tone="connected"):
@@ -194,28 +66,6 @@ def _summary_cards(nodes, mlflow):
     ]
 
 
-def _ops_nav(active):
-    links = [
-        ("Home", "/"),
-        ("Data Explorer", "/data-explorer"),
-        ("Preprocessing", "/preprocessing"),
-        ("Training", "/training"),
-        ("Postprocessing", "/postprocessing"),
-        ("Control", "/control-panel"),
-    ]
-    return html.Nav(
-        [
-            dcc.Link(
-                label,
-                href=href,
-                className="ops-nav-link ops-nav-link-active" if label == active else "ops-nav-link",
-            )
-            for label, href in links
-        ],
-        className="ops-nav",
-    )
-
-
 def _relative_age(iso_value):
     if not iso_value:
         return "waiting for first refresh"
@@ -234,57 +84,24 @@ def _relative_age(iso_value):
     return f"refreshed {minutes // 60}h ago"
 
 
-def _uri_cell(label, value, detail, link=False):
-    value = value or "n/a"
-    href = value if link and str(value).startswith(("http://", "https://")) else None
-    value_node = (
-        html.A(value, href=href, target="_blank", rel="noreferrer")
-        if href
-        else html.Span(value)
-    )
-    return html.Div(
-        [
-            html.Div(label, className="control-uri-label"),
-            html.Div(value_node, className="control-uri-value"),
-            html.Div(detail, className="control-uri-detail"),
-        ],
-        className="control-uri-cell",
-    )
-
-
-def _mlflow_card(item):
-    tone = _tone_slug(item.get("tone"))
-    return html.Article(
-        [
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Span(className=f"control-dot control-dot-{tone}"),
-                            html.Div(
-                                [
-                                    html.H3("MLflow Tracking Server"),
-                                    html.Div(item.get("detail", ""), className="control-node-queue"),
-                                ],
-                                className="control-title-stack",
-                            ),
-                        ],
-                        className="control-card-head",
-                    ),
-                    html.Div(item.get("status", "Unknown"), className=f"control-state control-state-{tone}"),
-                ],
-                className="control-card-top",
-            ),
-            html.Div(
-                [
-                    _uri_cell("Mac Tracking URI", item.get("tracking_uri"), "controller and preprocessing default", link=True),
-                    _uri_cell("Training URI", item.get("training_tracking_uri"), "Windows training default", link=True),
-                    _uri_cell("Browser URL", item.get("public_url") or item.get("url"), "open MLflow UI", link=True),
-                ],
-                className="control-uri-grid",
-            ),
-        ],
-        className=f"control-card control-card-tracking control-card-{tone}",
+def _b2_status_item():
+    try:
+        cards = get_backend_status_cards()
+    except Exception as exc:
+        return {
+            "service": "B2 Storage",
+            "status": "Unknown",
+            "detail": f"Could not read backend health cards: {exc}",
+            "tone": "warning",
+        }
+    return next(
+        (card for card in cards if "b2" in str(card.get("service", "")).lower()),
+        {
+            "service": "B2 Storage",
+            "status": "Unknown",
+            "detail": "No B2 health card was returned by the backend health service.",
+            "tone": "warning",
+        },
     )
 
 
@@ -296,28 +113,11 @@ layout = html.Div(
             interval=COMPUTE_HEALTH_POLL_MS,
             n_intervals=0,
         ),
+        dcc.Interval(id="control-panel-b2-refresh", interval=30000, n_intervals=0, max_intervals=120),
         dcc.Interval(id="control-panel-age-tick", interval=1000, n_intervals=0),
         dcc.Store(id="control-panel-last-refresh-store"),
 
-        html.Header(
-            [
-                html.Div(
-                    [
-                        html.Div(className="ops-brand-mark"),
-                        html.Div(
-                            [
-                                html.Div("LiDAR Platform", className="ops-brand-title"),
-                                html.Div("Remote workers, routing, and observability", className="ops-brand-subtitle"),
-                            ]
-                        ),
-                    ],
-                    className="ops-brand",
-                ),
-                _ops_nav("Control"),
-                html.Div("Operations Console", className="ops-live-pill"),
-            ],
-            className="ops-topbar",
-        ),
+        ops_topbar("Control", "Remote workers, routing, and observability", "Operations Console"),
 
         html.Div(
             [
@@ -328,8 +128,35 @@ layout = html.Div(
                         html.Div("Live Operations", className="ops-eyebrow"),
                         html.H1(["Compute", html.Br(), html.Em("Control Panel")]),
                         html.P("Remote workstation health, routing readiness, and tracking service status for MLS runs."),
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        html.Div("...", id="ctrl-metric-nodes-value", className="ops-hero-metric-value"),
+                                        html.Div("Active Nodes", className="ops-hero-metric-label"),
+                                    ],
+                                    className="ops-hero-metric",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Div("...", id="ctrl-metric-refresh-value", className="ops-hero-metric-value"),
+                                        html.Div("Refresh Cadence", className="ops-hero-metric-label"),
+                                    ],
+                                    className="ops-hero-metric",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Div("...", id="ctrl-metric-mlflow-value", className="ops-hero-metric-value"),
+                                        html.Div("MLflow Status", className="ops-hero-metric-label"),
+                                    ],
+                                    className="ops-hero-metric",
+                                ),
+                            ],
+                            id="control-hero-metrics",
+                            className="ops-hero-metrics",
+                        ),
                     ],
-                    className="control-hero-copy",
+                    className="ops-hero-copy",
                 ),
                 html.Div(
                     [
@@ -387,6 +214,25 @@ layout = html.Div(
                     ],
                     className="control-section",
                 ),
+                html.Section(
+                    [
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        html.H3("Cloud Storage"),
+                                        html.Span("Backblaze B2", className="control-section-badge"),
+                                    ],
+                                    className="control-section-title",
+                                ),
+                                html.Div("Bucket connectivity, file count, and last write timestamp.", className="control-section-sub"),
+                            ],
+                            className="control-section-head",
+                        ),
+                        html.Div(id="control-panel-b2", className="control-grid control-grid-single"),
+                    ],
+                    className="control-section",
+                ),
             ],
             className="control-sections",
         ),
@@ -400,6 +246,9 @@ layout = html.Div(
     Output("control-panel-mlflow", "children"),
     Output("control-panel-node-badge", "children"),
     Output("control-panel-last-refresh-store", "data"),
+    Output("ctrl-metric-nodes-value", "children"),
+    Output("ctrl-metric-refresh-value", "children"),
+    Output("ctrl-metric-mlflow-value", "children"),
     Input("control-panel-refresh", "n_intervals"),
     Input("control-panel-refresh-button", "n_clicks"),
 )
@@ -412,11 +261,23 @@ def refresh_control_panel(_interval_ticks, _manual_clicks):
 
     return (
         _summary_cards(nodes, mlflow),
-        [_node_card(item) for item in nodes],
-        [_mlflow_card(mlflow)],
+        [ops_service_health_card(item, variant="control-node") for item in nodes],
+        [ops_service_health_card(mlflow, variant="control-service")],
         f"{online_nodes}/{total_nodes} online",
         refreshed_at,
+        f"{online_nodes}/{total_nodes}",
+        f"{COMPUTE_HEALTH_POLL_MS / 1000:g}s",
+        mlflow.get("status") or "Unknown",
     )
+
+
+@callback(
+    Output("control-panel-b2", "children"),
+    Input("control-panel-b2-refresh", "n_intervals"),
+    Input("control-panel-refresh-button", "n_clicks"),
+)
+def refresh_b2_panel(_interval_ticks, _manual_clicks):
+    return [ops_service_health_card(_b2_status_item(), variant="control-service")]
 
 
 @callback(

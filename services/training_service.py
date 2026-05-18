@@ -18,7 +18,7 @@ REMOTE_TRAINING_SCRIPT_PATH = os.getenv(
     "REMOTE_TRAINING_SCRIPT_PATH",
     "/opt/mls_training/scripts/training_job.py",
 )
-AIRFLOW_TRAINING_DAG_ID = os.getenv("AIRFLOW_TRAINING_DAG_ID", "mls_training_v1")
+AIRFLOW_TRAINING_DAG_ID = os.getenv("AIRFLOW_TRAINING_DAG_ID", "lidar_training_pipeline")
 AIRFLOW_API_BASE_URL = os.getenv("AIRFLOW_API_BASE_URL", "")
 AIRFLOW_USERNAME = os.getenv("AIRFLOW_USERNAME", "")
 AIRFLOW_PASSWORD = os.getenv("AIRFLOW_PASSWORD", "")

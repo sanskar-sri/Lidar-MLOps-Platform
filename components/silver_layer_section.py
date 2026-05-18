@@ -120,22 +120,28 @@ def _density_heatmap(density_df):
         aggfunc="sum",
         fill_value=0,
     )
+    z_raw = pivot.values.tolist()
+    z_log = [[math.log1p(v) for v in row] for row in z_raw]
+    hover = [[f"{int(v):,} pts" for v in row] for row in z_raw]
+
     fig = go.Figure(
         data=go.Heatmap(
-            z=pivot.values,
+            z=z_log,
             x=list(pivot.columns),
             y=list(pivot.index),
             colorscale="Tealgrn",
-            colorbar={"title": "points"},
+            colorbar={"title": "log(pts+1)", "thickness": 14},
+            text=hover,
+            hovertemplate="%{text}<br>cx: %{x:.3f}<br>cy: %{y:.3f}<extra></extra>",
         )
     )
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        title="Density heatmap",
-        margin={"l": 42, "r": 18, "t": 46, "b": 36},
-        height=340,
+        title="Point density heatmap (log scale)",
+        margin={"l": 48, "r": 18, "t": 46, "b": 36},
+        height=360,
         xaxis_title="cx",
         yaxis_title="cy",
     )
@@ -145,10 +151,14 @@ def _density_heatmap(density_df):
 def _density_histogram(density_df):
     if density_df is None or "total_pts" not in getattr(density_df, "columns", []):
         return _blank_figure("Density histogram", "total_pts is not available.")
+    active = density_df[density_df["total_pts"] > 0]["total_pts"]
+    n_active = len(active)
+    if n_active == 0:
+        return _blank_figure("Density histogram", "No active grid cells found.")
     fig = go.Figure(
         data=go.Histogram(
-            x=density_df["total_pts"],
-            nbinsx=40,
+            x=active,
+            nbinsx=50,
             marker={"color": "#61b8ff", "line": {"color": "rgba(255,255,255,0.18)", "width": 1}},
         )
     )
@@ -156,10 +166,11 @@ def _density_histogram(density_df):
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        title="Density histogram",
-        margin={"l": 42, "r": 18, "t": 46, "b": 36},
-        height=340,
+        title=f"Points per active cell — {_format_number(n_active)} active cells (log scale)",
+        margin={"l": 48, "r": 18, "t": 50, "b": 36},
+        height=360,
         xaxis_title="points per grid cell",
+        xaxis_type="log",
         yaxis_title="cells",
     )
     return fig
@@ -324,6 +335,7 @@ def build_silver_layer_section(dataset_id, prep_version, b2_prefix, verification
     stats = payload.get("stats") or {}
     density_df = payload.get("density_df")
     errors = payload.get("errors") or {}
+    local_dir = str(payload.get("sources", {}).get("metadata", "") or "").replace("processed_cloud_meta.json", "").rstrip("/\\")
     readiness = compute_silver_readiness(verification, payload)
 
     warnings = [message for message in errors.values() if message]
@@ -339,6 +351,7 @@ def build_silver_layer_section(dataset_id, prep_version, b2_prefix, verification
                             html.Div("Silver Layer", className="ops-section-kicker"),
                             html.H2("Verified Silver Analytics"),
                             html.P("All charts below are built from processed_cloud_meta.json, silver_stats.json, and silver_density_grid.parquet. Missing data stays visible as a warning."),
+                            *([html.Div(f"Local staging: {local_dir}", className="gold-local-path")] if local_dir else []),
                         ],
                         className="ops-section-head",
                     ),
@@ -431,6 +444,15 @@ def build_silver_layer_section(dataset_id, prep_version, b2_prefix, verification
                         [
                             html.H3("Generated Silver Files"),
                             _verification_table(verification),
+                            dbc.Alert(
+                                "Charts loaded from local staging cache. B2 upload has not yet completed — silver files are not in the bucket.",
+                                color="info",
+                                className="mt-2",
+                                is_open=bool(
+                                    (verification or {}).get("status") not in {"passed"}
+                                    and metadata
+                                ),
+                            ),
                         ],
                         className="ops-review-card silver-card",
                     ),
