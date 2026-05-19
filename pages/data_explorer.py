@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, State, callback, dash_table, ALL
+from dash import html, dcc, Input, Output, State, callback, dash_table, ALL, no_update
 import plotly.graph_objects as go
 
 from components.upload_panel import upload_raw_data_panel
@@ -52,7 +52,7 @@ from services.upload_progress import (
     mark_upload_completed,
     mark_upload_failed,
 )
-from services.rerun_service import generate_rerun_preview
+from services.rerun_launch_service import launch_rerun_job, get_job_status
 
 
 dash.register_page(__name__, path="/data-explorer", name="Data Explorer")
@@ -1747,6 +1747,8 @@ def populate_rerun_tile_selector(dataset_id):
 
     options = []
 
+    _SUPPORTED_EXTS = {".ply", ".las", ".laz"}
+
     for _, row in file_summary.iterrows():
         filename = row.get("filename", "")
         b2_path = row.get("b2_path", "")
@@ -1754,7 +1756,8 @@ def populate_rerun_tile_selector(dataset_id):
         if not filename:
             continue
 
-        if not str(filename).lower().endswith(".ply"):
+        ext = os.path.splitext(str(filename))[1].lower()
+        if ext not in _SUPPORTED_EXTS:
             continue
 
         if not b2_path:
@@ -1769,7 +1772,7 @@ def populate_rerun_tile_selector(dataset_id):
 
     if not options:
         return [], panel_empty_state(
-            f"No PLY tiles were found in the file summary for dataset '{dataset_id}'.",
+            f"No PLY/LAS/LAZ tiles were found in the file summary for dataset '{dataset_id}'.",
             "warning",
         )
 
@@ -1783,36 +1786,249 @@ def populate_rerun_tile_selector(dataset_id):
 @callback(
     Output("rerun-tile-selector", "value"),
     Output("rerun-viewer-placeholder", "children", allow_duplicate=True),
+    Output("rerun-job-id", "data", allow_duplicate=True),
+    Output("rerun-poll-interval", "disabled", allow_duplicate=True),
+    Output("rerun-status-bar", "children", allow_duplicate=True),
     Input("selected-dataset-id", "data"),
     prevent_initial_call=True,
 )
 def reset_rerun_state_for_dataset(dataset_id):
     if not dataset_id:
-        return None, [
-            html.Br(),
-            dbc.Alert("Select a dataset before generating a Rerun recording.", color="info"),
-        ]
+        return (
+            None,
+            [html.Br(), dbc.Alert("Select a dataset before launching a Rerun recording.", color="info")],
+            None,
+            True,
+            "",
+        )
 
-    return None, [
-        html.Br(),
-        dbc.Alert(
+    return (
+        None,
+        [
+            html.Br(),
+            dbc.Alert(
+                ["Rerun context set to dataset ", html.Code(dataset_id),
+                 ". Select one tile and click Stream from B2 or Open in Rerun Viewer."],
+                color="info",
+            ),
+        ],
+        None,
+        True,
+        "",
+    )
+
+
+# -------------------------------------------------------------------
+# 15. Rerun — async dispatch (Stream from B2 / Open in Rerun Viewer)
+# -------------------------------------------------------------------
+
+def build_rerun_result_card(result: dict):
+    tile_rows = []
+    for item in result.get("tile_summaries", []):
+        detected = item.get("detected_columns", {}) or {}
+        tile_rows.append(
+            html.Tr(
+                [
+                    html.Td(item.get("tile_name", "")),
+                    html.Td(f'{int(item.get("original_points", 0)):,}'),
+                    html.Td(f'{int(item.get("logged_points", 0)):,}'),
+                    html.Td(html.Code(item.get("b2_key", ""))),
+                    html.Td(item.get("color_source", "")),
+                    html.Td(html.Code(str(detected.get("rgb", "")))),
+                    html.Td(html.Code(str(detected.get("intensity", "")))),
+                    html.Td(html.Code(str(detected.get("semantic_label", "")))),
+                ]
+            )
+        )
+
+    return dbc.Card(
+        dbc.CardBody(
             [
-                "Rerun context is set to dataset ",
-                html.Code(dataset_id),
-                ". Select one tile and generate a fresh recording for this dataset.",
-            ],
-            color="info",
+                dbc.Alert(
+                    [
+                        html.Strong("Rerun recording complete."),
+                        html.Br(),
+                        "The .rrd file was saved to disk.",
+                    ],
+                    color="success",
+                ),
+                html.H5("Generated Rerun Recording"),
+                html.Div(
+                    [html.Strong("RRD file: "), html.Code(result.get("rrd_path", ""))],
+                    className="mb-2",
+                ),
+                html.Div(
+                    [
+                        html.Strong("Open manually: "),
+                        html.Code(f'rerun "{result.get("rrd_path", "")}"'),
+                    ],
+                    className="mb-3",
+                ),
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    [html.H6("Tiles Loaded"), html.H4(str(result.get("tiles_loaded", 0)))]
+                                ),
+                                color="light",
+                            ),
+                            xs=12, md=3,
+                        ),
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    [
+                                        html.H6("Logged Points"),
+                                        html.H4(f'{int(result.get("total_logged_points", 0)):,}'),
+                                    ]
+                                ),
+                                color="light",
+                            ),
+                            xs=12, md=3,
+                        ),
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    [html.H6("Color Mode"), html.H4(str(result.get("color_mode", "")))]
+                                ),
+                                color="light",
+                            ),
+                            xs=12, md=3,
+                        ),
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    [html.H6("View Mode"), html.H4(str(result.get("view_mode", "")))]
+                                ),
+                                color="light",
+                            ),
+                            xs=12, md=3,
+                        ),
+                    ],
+                    className="g-3 mb-3",
+                ),
+                html.Div(
+                    [
+                        html.Strong("Available Rerun tabs/modes: "),
+                        html.Code(", ".join(result.get("available_modes", []))),
+                    ],
+                    className="mb-3",
+                ),
+                html.H6("Tile Summary"),
+                html.Div(
+                    html.Table(
+                        [
+                            html.Thead(
+                                html.Tr(
+                                    [
+                                        html.Th("Tile"),
+                                        html.Th("Original Points"),
+                                        html.Th("Logged Points"),
+                                        html.Th("B2 Path"),
+                                        html.Th("Selected Color Source"),
+                                        html.Th("RGB Field"),
+                                        html.Th("Intensity Field"),
+                                        html.Th("Semantic Label Field"),
+                                    ]
+                                )
+                            ),
+                            html.Tbody(tile_rows),
+                        ],
+                        className="table table-sm table-bordered",
+                    ),
+                    style={"overflowX": "auto", "maxWidth": "100%"},
+                ),
+            ]
         ),
+        color="success",
+        outline=True,
+    )
+
+
+def _build_rerun_items(dataset_id, selected_tiles, color_mode, view_mode):
+    """
+    Validate inputs and build tile_items + label_map_items dicts.
+    Returns (tile_items, label_map_items, error_component).
+    error_component is None on success, or a dbc.Alert/html component on failure.
+    """
+    if not dataset_id:
+        return None, None, dbc.Alert("No dataset selected.", color="warning")
+
+    if not selected_tiles:
+        return None, None, dbc.Alert(
+            "Please select one tile from the Tile Selector dropdown first.",
+            color="warning",
+        )
+
+    if isinstance(selected_tiles, str):
+        selected_tiles = [selected_tiles]
+
+    if len(selected_tiles) > 1:
+        return None, None, dbc.Alert(
+            "Rerun visualization is optimized for one tile at a time. Please select only one tile.",
+            color="warning",
+        )
+
+    for tile_path in selected_tiles:
+        if dataset_id not in str(tile_path or ""):
+            return None, None, dbc.Alert(
+                [
+                    html.Strong("The selected tile does not belong to the current dataset. "),
+                    html.Br(),
+                    "Please pick a tile from the refreshed dropdown.",
+                ],
+                color="warning",
+            )
+
+    metadata = load_dataset_metadata(dataset_id)
+    if not metadata:
+        return None, None, dbc.Alert(
+            f"No metadata found for dataset '{dataset_id}'. Please regenerate metadata first.",
+            color="danger",
+        )
+
+    tile_items = [
+        {"name": os.path.basename(str(tp)), "b2_key": str(tp)}
+        for tp in selected_tiles
+        if tp
+    ]
+    if not tile_items:
+        return None, None, dbc.Alert("No valid tile path was selected.", color="warning")
+
+    label_maps = metadata.get("label_maps", []) or []
+    label_map_items = [
+        {
+            "name": item.get("file_name", os.path.basename(str(item["b2_path"]))),
+            "b2_key": str(item["b2_path"]),
+        }
+        for item in label_maps
+        if item.get("b2_path")
     ]
 
+    requires_label_map = (
+        str(color_mode).strip().lower() in {"semantic_label", "binary_label"}
+        or str(view_mode).strip().lower() in {"semantic", "binary"}
+    )
+    if requires_label_map and not label_map_items:
+        return None, None, dbc.Alert(
+            [
+                html.Strong("Rerun preview cannot run semantic visualization."),
+                html.Br(),
+                "Semantic Label and Binary modes require a real XML/JSON/YAML label map in dataset metadata.",
+            ],
+            color="danger",
+        )
 
-# -------------------------------------------------------------------
-# 15. Generate Rerun Recording Button — real data only
-# -------------------------------------------------------------------
+    return tile_items, label_map_items, None
+
 
 @callback(
-    Output("rerun-viewer-placeholder", "children"),
-    Input("load-rerun-button", "n_clicks"),
+    Output("rerun-job-id", "data"),
+    Output("rerun-poll-interval", "disabled"),
+    Output("rerun-status-bar", "children"),
+    Input("stream-from-b2-button", "n_clicks"),
+    Input("open-in-rerun-button", "n_clicks"),
     State("rerun-tile-selector", "value"),
     State("point-budget-selector", "value"),
     State("color-mode-selector", "value"),
@@ -1820,296 +2036,104 @@ def reset_rerun_state_for_dataset(dataset_id):
     State("selected-dataset-id", "data"),
     prevent_initial_call=True,
 )
-def load_rerun_preview(
-    n_clicks,
+def dispatch_rerun_job(
+    _stream_clicks,
+    _open_clicks,
     selected_tiles,
     point_budget,
     color_mode,
     view_mode,
     dataset_id,
 ):
-    if not dataset_id:
-        return dbc.Alert("No dataset selected.", color="warning")
+    print(f"[RERUN DISPATCH] triggered_id={dash.ctx.triggered_id} dataset={dataset_id} tile={selected_tiles}")
 
-    if not selected_tiles:
-        return dbc.Alert(
-            "Please select one tile from the Tile Selector dropdown first.",
-            color="warning",
-        )
+    open_viewer = dash.ctx.triggered_id == "open-in-rerun-button"
 
-    # dcc.Dropdown(multi=True) returns list.
-    # This keeps compatibility if the value is ever a single string.
-    if isinstance(selected_tiles, str):
-        selected_tiles = [selected_tiles]
+    tile_items, label_map_items, err = _build_rerun_items(
+        dataset_id, selected_tiles, color_mode, view_mode
+    )
+    if err is not None:
+        return None, True, err
 
-    if len(selected_tiles) > 1:
-        return dbc.Alert(
-            "Large Rerun visualization is optimized for one tile at a time. Please select only one tile.",
-            color="warning",
-        )
-
-    for tile_path in selected_tiles:
-        tile_text = str(tile_path or "")
-        if dataset_id not in tile_text:
-            return dbc.Alert(
-                [
-                    html.Strong("The selected Rerun tile does not belong to the current dataset. "),
-                    html.Br(),
-                    "The tile selector was reset for dataset ",
-                    html.Code(dataset_id),
-                    ". Please pick a tile from the refreshed dropdown before generating a recording.",
-                ],
-                color="warning",
-            )
-
-    metadata = load_dataset_metadata(dataset_id)
-
-    if not metadata:
-        return dbc.Alert(
-            f"No metadata found for dataset '{dataset_id}'. Please regenerate metadata first.",
-            color="danger",
-        )
-
-    # ---------------------------------------------------------------
-    # Build real selected tile list from B2 paths
-    # ---------------------------------------------------------------
-
-    tile_items = []
-
-    for tile_path in selected_tiles:
-        if not tile_path:
-            continue
-
-        tile_items.append(
-            {
-                "name": os.path.basename(str(tile_path)),
-                "b2_key": str(tile_path),
-            }
-        )
-
-    if not tile_items:
-        return dbc.Alert(
-            "No valid tile path was selected.",
-            color="warning",
-        )
-
-    # ---------------------------------------------------------------
-    # Build real label-map list from metadata
-    # ---------------------------------------------------------------
-
-    label_maps = metadata.get("label_maps", []) or []
-    label_map_items = []
-
-    for item in label_maps:
-        b2_path = item.get("b2_path")
-
-        if b2_path:
-            label_map_items.append(
-                {
-                    "name": item.get("file_name", os.path.basename(str(b2_path))),
-                    "b2_key": str(b2_path),
-                }
-            )
-
-    requires_label_map = (
-        str(color_mode).strip().lower() in {"semantic_label", "binary_label"}
-        or str(view_mode).strip().lower() in {"semantic", "binary"}
+    job_id = launch_rerun_job(
+        dataset_id=dataset_id,
+        tile_items=tile_items,
+        label_map_items=label_map_items,
+        point_budget=int(point_budget or 50000),
+        color_mode=color_mode or "solid",
+        view_mode=view_mode or "raw",
+        open_viewer=open_viewer,
     )
 
-    if requires_label_map and not label_map_items:
-        return dbc.Alert(
+    status_msg = dbc.Alert(
+        [
+            dbc.Spinner(size="sm", color="info"),
+            html.Strong("Downloading tile from B2 and building recording… "),
+            "This runs in the background — the page stays responsive.",
+        ],
+        color="info",
+        className="py-2",
+    )
+
+    return job_id, False, status_msg
+
+
+@callback(
+    Output("rerun-viewer-placeholder", "children"),
+    Output("rerun-poll-interval", "disabled", allow_duplicate=True),
+    Output("rerun-status-bar", "children", allow_duplicate=True),
+    Input("rerun-poll-interval", "n_intervals"),
+    State("rerun-job-id", "data"),
+    prevent_initial_call=True,
+)
+def poll_rerun_job(n_intervals, job_id):
+    if not job_id:
+        return no_update, True, no_update
+
+    status = get_job_status(job_id)
+    job_status = status.get("status", "not_found")
+
+    if job_status == "running":
+        msg = dbc.Alert(
             [
-                html.Strong("Rerun preview cannot run semantic visualization."),
-                html.Br(),
-                "Semantic Label and Building vs Non-building modes require a real XML/JSON/YAML label map in dataset metadata.",
+                dbc.Spinner(size="sm", color="info"),
+                html.Strong(status.get("message", "Running…")),
             ],
-            color="danger",
+            color="info",
+            className="py-2",
         )
+        return no_update, False, msg
 
-    # ---------------------------------------------------------------
-    # Generate real Rerun .rrd file without opening the native viewer.
-    # ---------------------------------------------------------------
-
-    try:
-        result = generate_rerun_preview(
-            dataset_id=dataset_id,
-            tile_items=tile_items,
-            label_map_items=label_map_items,
-            point_budget=int(point_budget),
-            color_mode=color_mode,
-            view_mode=view_mode,
-            open_viewer=False,
-        )
-
-        tile_rows = []
-
-        for item in result.get("tile_summaries", []):
-            detected = item.get("detected_columns", {}) or {}
-
-            tile_rows.append(
-                html.Tr(
-                    [
-                        html.Td(item.get("tile_name", "")),
-                        html.Td(f'{int(item.get("original_points", 0)):,}'),
-                        html.Td(f'{int(item.get("logged_points", 0)):,}'),
-                        html.Td(html.Code(item.get("b2_key", ""))),
-                        html.Td(item.get("color_source", "")),
-                        html.Td(html.Code(str(detected.get("rgb", "")))),
-                        html.Td(html.Code(str(detected.get("intensity", "")))),
-                        html.Td(html.Code(str(detected.get("semantic_label", "")))),
-                    ]
-                )
-            )
-
-        return dbc.Card(
-            dbc.CardBody(
-                [
-                    dbc.Alert(
-                        [
-                            html.Strong("Rerun preview generated successfully."),
-                            html.Br(),
-                            "The recording was saved without opening the native viewer, to keep large point-cloud previews from freezing the system.",
-                        ],
-                        color="success",
-                    ),
-
-                    html.H5("Generated Rerun Recording"),
-
-                    html.Div(
-                        [
-                            html.Strong("RRD file: "),
-                            html.Code(result.get("rrd_path", "")),
-                        ],
-                        className="mb-2",
-                    ),
-
-                    html.Div(
-                        [
-                            html.Strong("Open manually from terminal when you are ready: "),
-                            html.Code(f'rerun "{result.get("rrd_path", "")}"'),
-                        ],
-                        className="mb-3",
-                    ),
-
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                dbc.Card(
-                                    dbc.CardBody(
-                                        [
-                                            html.H6("Tiles Loaded"),
-                                            html.H4(str(result.get("tiles_loaded", 0))),
-                                        ]
-                                    ),
-                                    color="light",
-                                ),
-                                xs=12,
-                                md=3,
-                            ),
-                            dbc.Col(
-                                dbc.Card(
-                                    dbc.CardBody(
-                                        [
-                                            html.H6("Logged Points"),
-                                            html.H4(
-                                                f'{int(result.get("total_logged_points", 0)):,}'
-                                            ),
-                                        ]
-                                    ),
-                                    color="light",
-                                ),
-                                xs=12,
-                                md=3,
-                            ),
-                            dbc.Col(
-                                dbc.Card(
-                                    dbc.CardBody(
-                                        [
-                                            html.H6("Color Mode"),
-                                            html.H4(str(result.get("color_mode", ""))),
-                                        ]
-                                    ),
-                                    color="light",
-                                ),
-                                xs=12,
-                                md=3,
-                            ),
-                            dbc.Col(
-                                dbc.Card(
-                                    dbc.CardBody(
-                                        [
-                                            html.H6("View Mode"),
-                                            html.H4(str(result.get("view_mode", ""))),
-                                        ]
-                                    ),
-                                    color="light",
-                                ),
-                                xs=12,
-                                md=3,
-                            ),
-                        ],
-                        className="g-3 mb-3",
-                    ),
-
-                    html.Div(
-                        [
-                            html.Strong("Available Rerun tabs/modes: "),
-                            html.Code(", ".join(result.get("available_modes", []))),
-                        ],
-                        className="mb-3",
-                    ),
-
-                    html.H6("Tile Summary"),
-
-                    html.Div(
-                        html.Table(
-                            [
-                                html.Thead(
-                                    html.Tr(
-                                        [
-                                            html.Th("Tile"),
-                                            html.Th("Original Points"),
-                                            html.Th("Logged Points"),
-                                            html.Th("B2 Path"),
-                                            html.Th("Selected Color Source"),
-                                            html.Th("RGB Field"),
-                                            html.Th("Intensity Field"),
-                                            html.Th("Semantic Label Field"),
-                                        ]
-                                    )
-                                ),
-                                html.Tbody(tile_rows),
-                            ],
-                            className="table table-sm table-bordered",
-                        ),
-                        style={
-                            "overflowX": "auto",
-                            "maxWidth": "100%",
-                        },
-                    ),
-                ]
-            ),
+    if job_status == "done":
+        result = status.get("result") or {}
+        viewer_card = build_rerun_result_card(result)
+        done_msg = dbc.Alert(
+            [html.Strong("Done. "), status.get("message", "Recording saved.")],
             color="success",
-            outline=True,
+            className="py-2",
         )
+        return viewer_card, True, done_msg
 
-    except Exception as e:
+    if job_status == "error":
+        err_text = status.get("error", "Unknown error.")
         print("=" * 80)
-        print("[RERUN PREVIEW ERROR]")
-        print(str(e))
+        print("[RERUN JOB ERROR]")
+        print(err_text)
         print("=" * 80)
-
-        return dbc.Alert(
+        err_card = dbc.Alert(
             [
-                html.Strong("Rerun preview failed."),
+                html.Strong("Rerun job failed."),
                 html.Br(),
                 html.Br(),
                 html.Strong("Reason:"),
                 html.Br(),
-                html.Code(str(e)),
+                html.Code(err_text),
                 html.Br(),
                 html.Br(),
-                "No mock visualization was generated. Fix the missing field, label map, selected color mode, or Rerun installation and try again.",
+                "Fix the issue and click Stream from B2 or Open in Rerun Viewer again.",
             ],
             color="danger",
         )
+        return err_card, True, ""
+
+    return no_update, True, no_update

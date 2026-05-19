@@ -283,9 +283,18 @@ def rerun_viewer_panel():
             dbc.CardHeader(html.H4("6. Rerun 3D Viewer")),
             dbc.CardBody(
                 [
+                    # Hidden stores and polling interval registered at layout time.
+                    dcc.Store(id="rerun-job-id"),
+                    dcc.Interval(
+                        id="rerun-poll-interval",
+                        interval=2000,
+                        n_intervals=0,
+                        disabled=True,
+                    ),
+
                     html.P(
-                        "Generate a Rerun preview from real uploaded point-cloud attributes. "
-                        "No mock point cloud or fake labels should be visualized.",
+                        "Visualize a real point-cloud tile directly from the B2 medallion store. "
+                        "No mock points or synthetic labels are generated.",
                         className="text-muted",
                     ),
 
@@ -338,24 +347,13 @@ def rerun_viewer_panel():
                                     dcc.Dropdown(
                                         id="color-mode-selector",
                                         options=[
-                                            {
-                                                "label": "Fast Single Color",
-                                                "value": "solid",
-                                            },
+                                            {"label": "Fast Single Color", "value": "solid"},
                                             {"label": "RGB", "value": "rgb"},
                                             {"label": "Height / Z", "value": "height"},
-                                            {
-                                                "label": "Intensity / Reflectance",
-                                                "value": "intensity",
-                                            },
-                                            {
-                                                "label": "Semantic Label",
-                                                "value": "semantic_label",
-                                            },
-                                            {
-                                                "label": "Building vs Non-building",
-                                                "value": "binary_label",
-                                            },
+                                            {"label": "Intensity / Reflectance", "value": "intensity"},
+                                            {"label": "High Contrast (rank-normalized)", "value": "high_contrast"},
+                                            {"label": "Semantic Label", "value": "semantic_label"},
+                                            {"label": "Building vs Non-building", "value": "binary_label"},
                                         ],
                                         value="solid",
                                         clearable=False,
@@ -373,18 +371,9 @@ def rerun_viewer_panel():
                                         id="view-mode-selector",
                                         options=[
                                             {"label": "Raw Cloud", "value": "raw"},
-                                            {
-                                                "label": "Semantic Label Cloud",
-                                                "value": "semantic",
-                                            },
-                                            {
-                                                "label": "Binary Label Cloud",
-                                                "value": "binary",
-                                            },
-                                            {
-                                                "label": "Z-Slice Preview",
-                                                "value": "z_slice",
-                                            },
+                                            {"label": "Semantic Label Cloud", "value": "semantic"},
+                                            {"label": "Binary Label Cloud", "value": "binary"},
+                                            {"label": "Z-Slice Preview", "value": "z_slice"},
                                         ],
                                         value="raw",
                                         clearable=False,
@@ -401,18 +390,33 @@ def rerun_viewer_panel():
 
                     html.Br(),
 
-                    dbc.Button(
-                        "Generate Rerun Recording",
-                        id="load-rerun-button",
-                        color="info",
+                    dbc.ButtonGroup(
+                        [
+                            dbc.Button(
+                                "Stream from B2",
+                                id="stream-from-b2-button",
+                                color="info",
+                                outline=True,
+                            ),
+                            dbc.Button(
+                                "Open in Rerun Viewer",
+                                id="open-in-rerun-button",
+                                color="primary",
+                            ),
+                        ],
+                        className="mb-2",
                     ),
+
+                    # Status bar updated by dispatch and poll callbacks.
+                    html.Div(id="rerun-status-bar", className="mt-2"),
 
                     html.Div(
                         id="rerun-viewer-placeholder",
                         children=[
                             html.Br(),
                             dbc.Alert(
-                                "Select a dataset, choose one tile, then generate a Rerun recording from real PLY/LAS fields.",
+                                "Select a dataset, choose one tile, then click "
+                                "Stream from B2 or Open in Rerun Viewer.",
                                 color="info",
                             ),
                         ],

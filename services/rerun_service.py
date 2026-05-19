@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import os
 import json
-import hashlib
+import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -147,6 +147,7 @@ def generate_rerun_preview(
         "rgb",
         "height",
         "intensity",
+        "high_contrast",
         "semantic_label",
         "binary_label",
     }
@@ -193,14 +194,7 @@ def generate_rerun_preview(
             "Semantic Label or Building vs Non-building mode requires a real XML/JSON/YAML label map."
         )
 
-    run_id = make_run_id(
-        dataset_id=dataset_id,
-        tile_items=tile_items,
-        color_mode=color_mode,
-        view_mode=view_mode,
-        point_budget=point_budget,
-    )
-
+    run_id = uuid.uuid4().hex[:10]
     rrd_path = RERUN_OUTPUT_DIR / f"{dataset_id}_{run_id}.rrd"
 
     init_recording(
@@ -234,12 +228,15 @@ def generate_rerun_preview(
             subfolder="tiles",
         )
 
-        fields = read_real_ply_fields(
-            local_tile_path,
-            include_rgb=selected_rerun_mode == "rgb",
-            include_intensity=selected_rerun_mode in {"intensity", "high_contrast"},
-            include_semantic=selected_rerun_mode in {"semantic_label", "binary_label"},
-        )
+        try:
+            fields = read_real_tile_fields(
+                local_tile_path,
+                include_rgb=selected_rerun_mode == "rgb",
+                include_intensity=selected_rerun_mode in {"intensity", "high_contrast"},
+                include_semantic=selected_rerun_mode in {"semantic_label", "binary_label"},
+            )
+        except Exception as _read_exc:
+            _evict_if_corrupted(local_tile_path, _read_exc)
 
         validate_requested_mode(
             fields=fields,
@@ -405,7 +402,10 @@ def compute_visual_origin(xyz: np.ndarray) -> np.ndarray:
 
 
 def to_local_visual_xyz(xyz: np.ndarray, visual_origin: np.ndarray) -> np.ndarray:
-    xyz = np.asarray(xyz, dtype=np.float32)
+    # Explicit copy: when point_budget >= n_points subsample_real_points returns
+    # the original array unchanged (copy=False), so in-place -= would silently
+    # modify xyz_full and corrupt any subsequent use of the raw coordinates.
+    xyz = np.asarray(xyz, dtype=np.float32).copy()
     xyz -= np.asarray(visual_origin, dtype=np.float32)
     return xyz
 
@@ -431,10 +431,22 @@ def ensure_b2_file_local(b2_key: str, dataset_id: str, subfolder: str) -> Path:
     if local_path.exists() and local_path.stat().st_size > 0:
         return local_path
 
-    download_b2_file_to_local(
-        b2_key=b2_key,
-        local_path=str(local_path),
-    )
+    try:
+        download_b2_file_to_local(
+            b2_key=b2_key,
+            local_path=str(local_path),
+        )
+    except Exception as exc:
+        err_lower = str(exc).lower()
+        if "file not present" in err_lower or "not present" in err_lower or type(exc).__name__ == "FileNotPresent":
+            raise RuntimeError(
+                f"The file '{b2_key}' does not exist in the B2 bucket.\n\n"
+                f"This dataset's source files have not been uploaded to B2 storage. "
+                f"Only datasets whose PLY/LAS/LAZ tiles have been successfully uploaded "
+                f"can be visualized in Rerun.\n\n"
+                f"Please upload this dataset's tiles first, then try again."
+            ) from exc
+        raise
 
     if not local_path.exists():
         raise RuntimeError(f"B2 download failed. Local file not created: {local_path}")
@@ -477,12 +489,7 @@ def read_real_ply_fields(
     if not local_path.exists():
         raise FileNotFoundError(local_path)
 
-    if local_path.suffix.lower() != ".ply":
-        raise ValueError(
-            f"Rerun preview currently supports PLY tiles only. Got: {local_path}"
-        )
-
-    ply = PlyData.read(str(local_path), mmap="r")
+    ply = PlyData.read(str(local_path))
 
     vertex_names = [element.name for element in ply.elements]
 
@@ -551,6 +558,148 @@ def read_real_ply_fields(
         "intensity_column": intensity_col or "",
         "semantic_label_column": semantic_col or "",
     }
+
+
+def _evict_if_corrupted(local_path: Path, exc: Exception) -> None:
+    """
+    If exc looks like a truncated/corrupted file error, delete the local cache
+    and raise a user-friendly message telling the user to click again.
+
+    A partial B2 download leaves a file that passes the size > 0 check but
+    fails mid-read (e.g. plyfile 'early end-of-file'). Evicting the cache lets
+    the next launch re-download the tile from B2.
+    """
+
+    _TRUNCATION_KEYWORDS = [
+        "end-of-file", "early end", "truncat",
+        "unexpected eof", "unexpected end", "corrupt",
+    ]
+
+    err_lower = str(exc).lower()
+
+    if any(kw in err_lower for kw in _TRUNCATION_KEYWORDS):
+        try:
+            local_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        raise RuntimeError(
+            f"The cached tile file '{local_path.name}' was incomplete or corrupted "
+            f"(the previous B2 download was truncated). "
+            f"The bad cache file has been deleted automatically. "
+            f"Please click 'Stream from B2' or 'Open in Rerun Viewer' again — "
+            f"the tile will be re-downloaded fresh from B2.\n\n"
+            f"Technical detail: {exc}"
+        ) from exc
+
+    raise exc
+
+
+def read_real_las_fields(
+    local_path: str | Path,
+    include_rgb: bool = False,
+    include_intensity: bool = False,
+    include_semantic: bool = False,
+) -> dict[str, Any]:
+    """
+    Read real fields from a LAS or LAZ tile using laspy.
+    Returns the same structure as read_real_ply_fields.
+    """
+
+    try:
+        import laspy
+    except ImportError as exc:
+        raise ImportError(
+            "laspy is required to read LAS/LAZ tiles. "
+            "Install it with: pip install laspy[laszip]"
+        ) from exc
+
+    local_path = Path(local_path)
+
+    if not local_path.exists():
+        raise FileNotFoundError(local_path)
+
+    las = laspy.read(str(local_path))
+
+    x = np.asarray(las.x, dtype=np.float32)
+    y = np.asarray(las.y, dtype=np.float32)
+    z = np.asarray(las.z, dtype=np.float32)
+    xyz = np.column_stack([x, y, z])
+
+    point_format = las.point_format
+    dim_names = [d.name for d in point_format.dimensions]
+
+    rgb = None
+    rgb_columns: list[str] = []
+
+    if include_rgb and hasattr(las, "red") and hasattr(las, "green") and hasattr(las, "blue"):
+        r = np.asarray(las.red, dtype=np.float32)
+        g = np.asarray(las.green, dtype=np.float32)
+        b = np.asarray(las.blue, dtype=np.float32)
+        # LAS RGB is uint16 (0–65535) — scale to 0–255
+        scale = 255.0 / 65535.0 if r.max() > 255 else 1.0
+        rgb = np.clip(np.column_stack([r, g, b]) * scale, 0, 255).astype(np.uint8)
+        rgb_columns = ["red", "green", "blue"]
+
+    intensity = None
+    intensity_col = ""
+
+    if include_intensity and hasattr(las, "intensity"):
+        intensity = np.asarray(las.intensity, dtype=np.float32)
+        intensity_col = "intensity"
+
+    semantic_label = None
+    semantic_col = ""
+
+    if include_semantic:
+        for candidate in ("classification", "scalar_Label", "label", "class"):
+            if hasattr(las, candidate):
+                semantic_label = np.asarray(getattr(las, candidate), dtype=np.int64)
+                semantic_col = candidate
+                break
+
+    return {
+        "xyz": xyz,
+        "rgb": rgb,
+        "intensity": intensity,
+        "semantic_label": semantic_label,
+        "field_names": dim_names,
+        "xyz_columns": ["x", "y", "z"],
+        "rgb_columns": rgb_columns,
+        "intensity_column": intensity_col,
+        "semantic_label_column": semantic_col,
+    }
+
+
+def read_real_tile_fields(
+    local_path: str | Path,
+    include_rgb: bool = False,
+    include_intensity: bool = False,
+    include_semantic: bool = False,
+) -> dict[str, Any]:
+    """Format-agnostic dispatcher: routes PLY, LAS, or LAZ to the correct reader."""
+
+    ext = Path(local_path).suffix.lower()
+
+    if ext == ".ply":
+        return read_real_ply_fields(
+            local_path,
+            include_rgb=include_rgb,
+            include_intensity=include_intensity,
+            include_semantic=include_semantic,
+        )
+
+    if ext in {".las", ".laz"}:
+        return read_real_las_fields(
+            local_path,
+            include_rgb=include_rgb,
+            include_intensity=include_intensity,
+            include_semantic=include_semantic,
+        )
+
+    raise ValueError(
+        f"Unsupported point cloud format: {ext}. Supported: .ply, .las, .laz"
+    )
 
 
 def normalize_field_name(name: str) -> str:
@@ -670,7 +819,7 @@ def validate_requested_mode(
             f"RGB mode selected, but tile {tile_name} has no real RGB fields."
         )
 
-    if color_mode == "intensity" and fields["intensity"] is None:
+    if color_mode in {"intensity", "high_contrast"} and fields["intensity"] is None:
         raise ValueError(
             f"Intensity / Reflectance mode selected, but tile {tile_name} "
             f"has no real intensity/reflectance field."
@@ -714,14 +863,11 @@ def subsample_real_points(
     if point_budget <= 0 or len(xyz) <= point_budget:
         return xyz.astype(np.float32, copy=False), None
 
-    idx = np.linspace(
-        0,
-        len(xyz) - 1,
-        num=int(point_budget),
-        dtype=np.int64,
-    )
+    idx = np.sort(
+        np.random.choice(len(xyz), size=int(point_budget), replace=False)
+    ).astype(np.int64)
 
-    return xyz[idx].astype(np.float32), idx.astype(np.int64)
+    return xyz[idx].astype(np.float32), idx
 
 
 def sample_array(values: np.ndarray, sample_idx: np.ndarray | None) -> np.ndarray:
@@ -1232,28 +1378,6 @@ def strip_ns(text: Any) -> str:
     return str(text).split("}")[-1]
 
 
-def make_run_id(
-    dataset_id: str,
-    tile_items: list[dict[str, Any]],
-    color_mode: str,
-    view_mode: str,
-    point_budget: int,
-) -> str:
-    payload = json.dumps(
-        {
-            "recording_profile": RECORDING_PROFILE,
-            "dataset_id": dataset_id,
-            "tiles": [item.get("b2_key") for item in tile_items],
-            "color_mode": color_mode,
-            "view_mode": view_mode,
-            "point_budget": int(point_budget),
-        },
-        sort_keys=True,
-    )
-
-    return hashlib.md5(payload.encode("utf-8")).hexdigest()[:10]
-
-
 def describe_selected_color_source(
     fields: dict[str, Any],
     color_mode: str,
@@ -1271,6 +1395,9 @@ def describe_selected_color_source(
 
     if color_mode == "intensity":
         return f"real intensity/reflectance field: {fields.get('intensity_column', '')}"
+
+    if color_mode == "high_contrast":
+        return f"real intensity/reflectance field (rank-normalized): {fields.get('intensity_column', '')}"
 
     if color_mode == "semantic_label":
         return (

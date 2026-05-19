@@ -42,6 +42,24 @@ RERUN_POINT_RADII = None
 RERUN_MAX_POINTS_PER_ENTITY = 1_000_000
 
 
+def _ensure_rerun_on_path() -> None:
+    """
+    rerun-sdk installs its package inside a rerun_sdk/ subdirectory and uses a
+    .pth file to add that subdirectory to sys.path.  In some venv configurations
+    the .pth file is not processed (relative-path .pth entries are ignored when
+    the site module is invoked with a non-standard prefix).  We resolve the path
+    explicitly so the import always works regardless of how the server is started.
+    """
+    import sys
+
+    site_packages = Path(__file__).resolve().parents[1] / ".venvvv" / "lib"
+    for py_dir in site_packages.glob("python3.*"):
+        candidate = py_dir / "site-packages" / "rerun_sdk"
+        if candidate.is_dir() and str(candidate) not in sys.path:
+            sys.path.insert(0, str(candidate))
+            return
+
+
 def get_rerun_modules():
     """
     Import Rerun only when a recording is generated/opened.
@@ -53,6 +71,7 @@ def get_rerun_modules():
     global rr, rrb
 
     if rr is None or rrb is None:
+        _ensure_rerun_on_path()
         import rerun as _rr
         import rerun.blueprint as _rrb
 
@@ -557,7 +576,12 @@ def finalize_blueprint(
 
     active_mode = next((mode for mode in mode_order if mode in available_modes), "")
     view_name = mode_labels.get(active_mode, "Point Cloud")
-    view_contents = f"$origin/*/{active_mode}/**" if active_mode else "$origin/**"
+    # Use the SDK default "$origin/**" — shows everything logged under the
+    # entity root.  Sub-path filters like "$origin/*/<mode>/**" are syntactically
+    # valid but reliably resolve to empty in Rerun 0.31.x when the viewer opens
+    # a saved .rrd file.  Since exactly one mode is logged per recording this
+    # catches all the data without ambiguity.
+    view_contents = "$origin/**"
 
     eye = (
         center[0] + dist,
@@ -609,19 +633,54 @@ def finalize_blueprint(
 def open_saved_rrd(rrd_path: str) -> None:
     """
     Open a saved .rrd file in the native Rerun Viewer.
+
+    The venv's `rerun` CLI entry-point fails when the .pth file that adds
+    rerun_sdk/ to sys.path is not processed (a known issue with some venv
+    configurations on macOS).  We bypass the broken entry-point and launch
+    the viewer directly via the Python interpreter, injecting the correct
+    sys.path ourselves.
     """
+
+    import sys
 
     if not os.path.exists(rrd_path):
         raise FileNotFoundError(rrd_path)
 
-    rerun_bin = "rerun"
+    # Inside Docker there is no display — the native viewer cannot open a window.
+    # /.dockerenv is created by the Docker runtime and is the standard detection
+    # sentinel; it is absent on macOS and bare-metal Linux.
+    if os.path.exists("/.dockerenv"):
+        raise RuntimeError(
+            "Running inside Docker (headless) — the native Rerun Viewer cannot open a window.\n\n"
+            "The .rrd recording was saved successfully. Open it on your local machine:\n\n"
+            f"  rerun \"{rrd_path.replace('/app/', os.path.expanduser('~/Desktop/data-platform/'))}\"\n\n"
+            "Or copy the file from the container's ./data/rerun_outputs/ directory "
+            "(it is volume-mapped to your host at ./data/rerun_outputs/) and run rerun locally."
+        )
 
-    local_venv_bin = Path("venv") / "bin" / "rerun"
+    # Resolve the rerun_sdk directory the same way _ensure_rerun_on_path does.
+    rerun_sdk_dir = ""
+    site_packages = Path(__file__).resolve().parents[1] / ".venvvv" / "lib"
+    for py_dir in site_packages.glob("python3.*"):
+        candidate = py_dir / "site-packages" / "rerun_sdk"
+        if candidate.is_dir():
+            rerun_sdk_dir = str(candidate)
+            break
 
-    if local_venv_bin.exists():
-        rerun_bin = str(local_venv_bin)
+    # Launch the viewer in a detached subprocess using the same interpreter.
+    # Injecting rerun_sdk_dir into sys.path before the import ensures rerun_cli
+    # is importable even when the .pth file is not processed.
+    # --new is an alias for --port auto: always spawns a fresh viewer window
+    # even when another Rerun viewer is already running on the default port.
+    launch_script = (
+        f"import sys; "
+        f"sys.path.insert(0, {rerun_sdk_dir!r}); "
+        f"from rerun_cli.__main__ import main; "
+        f"sys.argv = ['rerun', '--new', {rrd_path!r}]; "
+        f"main()"
+    )
 
-    subprocess.Popen([rerun_bin, rrd_path])
+    subprocess.Popen([sys.executable, "-c", launch_script])
 
 
 # ---------------------------------------------------------------------
