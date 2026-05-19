@@ -5230,6 +5230,78 @@ pre {
     color: var(--de-muted);
 }
 
+.browser-upload-file-list {
+    margin: 10px 0 8px;
+    border: 1px solid rgba(79, 179, 255, 0.16);
+    border-radius: 8px;
+    background: rgba(7, 9, 15, 0.52);
+    padding: 10px 12px;
+    max-height: 220px;
+    overflow: auto;
+}
+
+.browser-upload-empty,
+.browser-upload-more {
+    color: var(--de-muted);
+    font-size: 13px;
+}
+
+.browser-upload-summary {
+    color: var(--de-text);
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+.browser-upload-file-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 6px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--de-muted);
+    font-size: 12px;
+}
+
+.browser-upload-file-row span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.browser-upload-file-row strong {
+    color: var(--de-text);
+    white-space: nowrap;
+}
+
+.browser-upload-client-status {
+    min-height: 34px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--de-muted);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 13px;
+}
+
+.browser-upload-client-status.active,
+.browser-upload-client-status.info {
+    border-color: rgba(79, 179, 255, 0.25);
+    color: #bde7ff;
+    background: rgba(79, 179, 255, 0.08);
+}
+
+.browser-upload-client-status.success {
+    border-color: rgba(61, 214, 181, 0.3);
+    color: #9eeadf;
+    background: rgba(61, 214, 181, 0.08);
+}
+
+.browser-upload-client-status.error {
+    border-color: rgba(255, 107, 107, 0.35);
+    color: #ffc5c5;
+    background: rgba(255, 107, 107, 0.1);
+}
+
 /* Training job cards are read-only info cards — scoped to training-page-de only */
 .training-page-de .dataset-card-list .dataset-card {
     cursor: default;

@@ -123,10 +123,90 @@ def upload_raw_data_panel():
 
                     html.Hr(),
 
-                    html.H5("Large Point Cloud Tile Upload"),
+                    html.H5("Reliable Browser Upload"),
 
                     dbc.Alert(
-                        "Use this for one large .ply/.las/.laz tile. The file uploads directly from local disk to B2 without browser base64 loading.",
+                        "Select raw tiles or a folder. The browser sends resumable chunks to Dash first; Dash uploads to B2 in the background.",
+                        color="info",
+                    ),
+
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                dbc.Button(
+                                    "Choose Files",
+                                    id="browser-upload-choose-files-button",
+                                    color="primary",
+                                    outline=True,
+                                    className="w-100",
+                                ),
+                                width=3,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    "Choose Folder",
+                                    id="browser-upload-choose-folder-button",
+                                    color="primary",
+                                    outline=True,
+                                    className="w-100",
+                                ),
+                                width=3,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    "Start Smooth Upload",
+                                    id="browser-upload-start-button",
+                                    color="success",
+                                    className="w-100",
+                                ),
+                                width=3,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    "Pause",
+                                    id="browser-upload-pause-button",
+                                    color="secondary",
+                                    outline=True,
+                                    disabled=True,
+                                    className="w-100",
+                                ),
+                                width=3,
+                            ),
+                        ],
+                        className="g-2 mb-2",
+                    ),
+
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                dbc.Button(
+                                    "Abort Browser Upload",
+                                    id="browser-upload-abort-button",
+                                    color="danger",
+                                    outline=True,
+                                    disabled=True,
+                                ),
+                                width="auto",
+                            ),
+                        ],
+                        className="g-2 mb-3",
+                    ),
+
+                    html.Div(
+                        id="browser-upload-file-list",
+                        className="browser-upload-file-list",
+                    ),
+                    html.Div(
+                        id="browser-upload-client-status",
+                        className="browser-upload-client-status",
+                    ),
+
+                    html.Hr(),
+
+                    html.H5("Admin Server Path Upload"),
+
+                    dbc.Alert(
+                        "Use this only when the data folder is mounted into the Dash container, such as /datasets/torronto.",
                         color="warning",
                     ),
 

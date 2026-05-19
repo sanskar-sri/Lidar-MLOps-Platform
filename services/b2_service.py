@@ -21,6 +21,11 @@ B2_KEY_ID = os.getenv("B2_KEY_ID")
 B2_APPLICATION_KEY = os.getenv("B2_APPLICATION_KEY")
 B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME", "Building-Identification-MLS")
 LOCAL_STAGING_DIR = os.getenv("LOCAL_STAGING_DIR", "data/local_staging")
+DATASETS_HOST_PREFIX = os.getenv(
+    "DATASETS_HOST_PREFIX",
+    "/Users/sanskarsrivastava/Desktop/Datasets",
+)
+DATASETS_CONTAINER_PREFIX = os.getenv("DATASETS_CONTAINER_PREFIX", "/datasets")
 
 
 SUPPORTED_TILE_EXTENSIONS = {
@@ -118,7 +123,20 @@ def normalize_local_path(path):
     if not path:
         return ""
 
-    return str(path).strip().strip('"').strip("'")
+    cleaned = str(path).strip().strip('"').strip("'")
+    host_prefix = DATASETS_HOST_PREFIX.rstrip("/")
+    container_prefix = DATASETS_CONTAINER_PREFIX.rstrip("/")
+
+    if (
+        host_prefix
+        and container_prefix
+        and cleaned.startswith(f"{host_prefix}/")
+    ):
+        mapped_path = f"{container_prefix}{cleaned[len(host_prefix):]}"
+        if os.path.exists(mapped_path):
+            return mapped_path
+
+    return cleaned
 
 
 def safe_file_id(file_obj):
@@ -456,6 +474,17 @@ def find_supported_files_in_folder(folder_path):
                 supported_files.append(full_path)
 
     supported_files.sort()
+
+    has_point_cloud_tile = any(
+        os.path.splitext(path)[1].lower() in SUPPORTED_TILE_EXTENSIONS
+        for path in supported_files
+    )
+
+    if supported_files and not has_point_cloud_tile:
+        raise ValueError(
+            "Folder contains only label-map files. Add at least one raw point-cloud tile "
+            "(.ply, .las, .laz, etc.)."
+        )
 
     print("=" * 80)
     print("[FOLDER SCAN COMPLETED]")

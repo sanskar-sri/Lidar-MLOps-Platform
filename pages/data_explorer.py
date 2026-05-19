@@ -122,6 +122,25 @@ def mark_upload_failed_safely(dataset_id, error):
         print(f"[UPLOAD PROGRESS ERROR] {progress_error}")
 
 
+def format_bytes(value):
+    try:
+        number = float(value or 0)
+    except Exception:
+        number = 0
+
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_index = 0
+
+    while number >= 1024 and unit_index < len(units) - 1:
+        number /= 1024
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{int(number)} {units[unit_index]}"
+
+    return f"{number:.2f} {units[unit_index]}"
+
+
 def apply_dark_figure_theme(fig):
     fig.update_layout(
         template="plotly_dark",
@@ -1056,11 +1075,21 @@ def update_upload_progress_ui(n_intervals, dataset_id):
     total_files = progress.get("total_files", 0)
     failed_files = progress.get("failed_files", 0)
     message = progress.get("message", "")
+    uploaded_bytes = progress.get("uploaded_bytes")
+    total_bytes = progress.get("total_bytes")
+
+    if total_bytes:
+        upload_detail = (
+            f"Uploaded: {format_bytes(uploaded_bytes)} / {format_bytes(total_bytes)} "
+            f"({uploaded_files}/{total_files} files)"
+        )
+    else:
+        upload_detail = f"Uploaded: {uploaded_files}/{total_files}"
 
     text = (
         f"Status: {status} | "
         f"Stage: {stage} | "
-        f"Uploaded: {uploaded_files}/{total_files} | "
+        f"{upload_detail} | "
         f"Failed: {failed_files} | "
         f"Current file: {current_file} | "
         f"{message}"

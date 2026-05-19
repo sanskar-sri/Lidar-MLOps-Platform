@@ -3,6 +3,16 @@ import os
 import dash
 import dash_bootstrap_components as dbc
 from dash import html, dcc
+from flask import jsonify, request
+
+from services.browser_upload_service import (
+    abort_browser_upload_session,
+    complete_browser_upload_file,
+    complete_browser_upload_session,
+    create_browser_upload_session,
+    load_browser_upload_session,
+    receive_browser_upload_chunk,
+)
 
 
 print("Loading dashboard pages and services...", flush=True)
@@ -84,6 +94,70 @@ app.layout = dbc.Container(
         ),
     ],
 )
+
+
+def _json_payload():
+    return request.get_json(silent=True) or {}
+
+
+def _json_error(error, status_code=400):
+    return jsonify({"ok": False, "error": str(error)}), status_code
+
+
+@app.server.route("/api/browser-upload/sessions", methods=["POST"])
+def api_create_browser_upload_session():
+    try:
+        session = create_browser_upload_session(_json_payload())
+        return jsonify({"ok": True, "session": session})
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@app.server.route("/api/browser-upload/sessions/<session_id>", methods=["GET"])
+def api_get_browser_upload_session(session_id):
+    try:
+        return jsonify({"ok": True, "session": load_browser_upload_session(session_id)})
+    except FileNotFoundError as exc:
+        return _json_error(exc, status_code=404)
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@app.server.route("/api/browser-upload/chunk", methods=["POST"])
+def api_receive_browser_upload_chunk():
+    try:
+        return jsonify(
+            {"ok": True, **receive_browser_upload_chunk(request.form, request.files)}
+        )
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@app.server.route("/api/browser-upload/complete-file", methods=["POST"])
+def api_complete_browser_upload_file():
+    try:
+        result = complete_browser_upload_file(_json_payload())
+        return jsonify({"ok": True, **result})
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@app.server.route("/api/browser-upload/complete-session", methods=["POST"])
+def api_complete_browser_upload_session():
+    try:
+        session = complete_browser_upload_session(_json_payload())
+        return jsonify({"ok": True, "session": session})
+    except Exception as exc:
+        return _json_error(exc)
+
+
+@app.server.route("/api/browser-upload/abort", methods=["POST"])
+def api_abort_browser_upload_session():
+    try:
+        session = abort_browser_upload_session(_json_payload())
+        return jsonify({"ok": True, "session": session})
+    except Exception as exc:
+        return _json_error(exc)
 
 
 if __name__ == "__main__":
