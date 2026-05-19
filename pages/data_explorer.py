@@ -809,33 +809,17 @@ def apply_card_selection(selected_dataset_id, rows):
 
 @callback(
     Output("selected-dataset-id", "data"),
-    Input({"type": "dataset-card", "dataset_id": ALL}, "n_clicks_timestamp"),
-    State({"type": "dataset-card", "dataset_id": ALL}, "id"),
+    Input({"type": "dataset-card", "dataset_id": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def select_dataset(click_timestamps, card_ids):
-    if not click_timestamps or not card_ids:
+def select_dataset(n_clicks_list):
+    triggered = dash.ctx.triggered_id
+    if not triggered or not isinstance(triggered, dict):
         return dash.no_update
 
-    clicked_cards = []
-
-    for timestamp, card_id in zip(click_timestamps, card_ids):
-        try:
-            click_time = int(timestamp)
-        except (TypeError, ValueError):
-            click_time = -1
-
-        if click_time < 0 or not isinstance(card_id, dict):
-            continue
-
-        dataset_id = str(card_id.get("dataset_id") or "").strip()
-        if dataset_id:
-            clicked_cards.append((click_time, dataset_id))
-
-    if not clicked_cards:
+    dataset_id = str(triggered.get("dataset_id") or "").strip()
+    if not dataset_id:
         return dash.no_update
-
-    _click_time, dataset_id = max(clicked_cards, key=lambda item: item[0])
 
     print("=" * 80)
     print("[DATASET SELECTED]")
@@ -1303,16 +1287,48 @@ def load_dataset_dashboard(dataset_id):
 
     metadata = load_dataset_metadata(dataset_id)
 
-    kpis = load_dashboard_kpis(dataset_id)
-    attributes = load_attribute_summary(dataset_id)
-    labels = load_label_distribution(dataset_id)
-    class_labels = load_class_label_distribution(dataset_id)
-    spatial = load_spatial_summary(dataset_id)
-    class_mapping_summary = load_class_mapping_summary(dataset_id)
+    try:
+        kpis = load_dashboard_kpis(dataset_id)
+    except Exception as _kpi_err:
+        print(f"[KPI LOAD ERROR] {_kpi_err}")
+        import traceback; traceback.print_exc()
+        kpis = None
+
+    try:
+        attributes = load_attribute_summary(dataset_id)
+    except Exception as _e:
+        print(f"[ATTRIBUTE LOAD ERROR] {_e}")
+        attributes = None
+
+    try:
+        labels = load_label_distribution(dataset_id)
+    except Exception as _e:
+        print(f"[LABEL LOAD ERROR] {_e}")
+        labels = None
+
+    try:
+        class_labels = load_class_label_distribution(dataset_id)
+    except Exception as _e:
+        print(f"[CLASS LABEL LOAD ERROR] {_e}")
+        class_labels = None
+
+    try:
+        spatial = load_spatial_summary(dataset_id)
+    except Exception as _e:
+        print(f"[SPATIAL LOAD ERROR] {_e}")
+        spatial = None
+
+    try:
+        class_mapping_summary = load_class_mapping_summary(dataset_id)
+    except Exception as _e:
+        print(f"[CLASS MAPPING LOAD ERROR] {_e}")
+        class_mapping_summary = None
+
+    kpi_row_count = len(kpis) if kpis is not None and not (hasattr(kpis, "empty") and kpis.empty) else 0
 
     print("[LOCAL METADATA CHECK]")
     print(f"Metadata keys: {list(metadata.keys()) if metadata else 'No metadata found'}")
-    print(f"KPI rows: {len(kpis) if kpis is not None else 0}")
+    print(f"KPI rows: {kpi_row_count}")
     print(f"Attribute rows: {len(attributes) if attributes is not None else 0}")
     print(f"Binary label rows: {len(labels) if labels is not None else 0}")
     print(f"Class label rows: {len(class_labels) if class_labels is not None else 0}")
