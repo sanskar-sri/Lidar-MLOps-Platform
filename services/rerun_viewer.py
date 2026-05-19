@@ -646,16 +646,47 @@ def open_saved_rrd(rrd_path: str) -> None:
     if not os.path.exists(rrd_path):
         raise FileNotFoundError(rrd_path)
 
-    # Inside Docker there is no display — the native viewer cannot open a window.
-    # /.dockerenv is created by the Docker runtime and is the standard detection
-    # sentinel; it is absent on macOS and bare-metal Linux.
+    # Inside Docker there is no display to spawn a new viewer window.
+    # /.dockerenv is the standard Docker runtime sentinel (absent on macOS/bare-metal).
     if os.path.exists("/.dockerenv"):
+        # The .rrd is inside the container at /app/data/rerun_outputs/<name>.
+        # The volume mapping in docker-compose is  ./data:/app/data  so the
+        # same file is accessible on the host at  ./data/rerun_outputs/<name>.
+        rrd_filename = os.path.basename(rrd_path)
+        mac_rel_path = f"data/rerun_outputs/{rrd_filename}"
+
+        # Attempt 1: stream directly to a Rerun Viewer already running on the host.
+        # Docker Desktop on macOS automatically maps host.docker.internal → Mac IP.
+        # If the user has run `rerun` on their Mac it is listening on port 9876.
+        host_grpc = "rerun+http://host.docker.internal:9876/proxy"
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c",
+                 f"from rerun_cli.__main__ import main; import sys; "
+                 f"sys.argv = ['rerun', '--connect', {host_grpc!r}, {rrd_path!r}]; "
+                 f"main()"],
+                timeout=8,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return  # recording appeared in the host viewer
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            pass
+
+        # Attempt 1 failed — guide the user to the two easy options.
         raise RuntimeError(
-            "Running inside Docker (headless) — the native Rerun Viewer cannot open a window.\n\n"
-            "The .rrd recording was saved successfully. Open it on your local machine:\n\n"
-            f"  rerun \"{rrd_path.replace('/app/', os.path.expanduser('~/Desktop/data-platform/'))}\"\n\n"
-            "Or copy the file from the container's ./data/rerun_outputs/ directory "
-            "(it is volume-mapped to your host at ./data/rerun_outputs/) and run rerun locally."
+            f"Recording saved → ./{mac_rel_path}\n\n"
+            "To open automatically, use one of these options:\n\n"
+            "  Option A (easiest): run this on your Mac and keep it running —\n"
+            "    python watch_rerun.py\n"
+            "  New recordings open automatically whenever you click the button.\n\n"
+            "  Option B (instant streaming): start an empty Rerun window on your Mac —\n"
+            "    rerun\n"
+            "  Then click 'Open in Rerun Viewer' again. The recording streams\n"
+            "  directly into the open window with no manual steps.\n\n"
+            "  Manual fallback —\n"
+            f"    rerun \"<project_root>/{mac_rel_path}\""
         )
 
     # Resolve the rerun_sdk directory the same way _ensure_rerun_on_path does.
