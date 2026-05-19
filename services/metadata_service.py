@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 from collections import Counter
+from pathlib import Path
 
 from services.compat import disable_incompatible_pandas_accelerators
 
@@ -33,9 +34,10 @@ from services.parquet_service import save_analytics_parquets
 # Local metadata output paths
 # -------------------------------------------------------------------
 
-METADATA_DIR = "data/metadata/datasets"
-ANALYTICS_DIR = "data/metadata_analytics"
-TEMP_B2_DOWNLOAD_DIR = "data/local_staging/b2_metadata_downloads"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+METADATA_DIR = str(_PROJECT_ROOT / "data" / "metadata" / "datasets")
+ANALYTICS_DIR = str(_PROJECT_ROOT / "data" / "metadata_analytics")
+TEMP_B2_DOWNLOAD_DIR = str(_PROJECT_ROOT / "data" / "local_staging" / "b2_metadata_downloads")
 
 
 # -------------------------------------------------------------------

@@ -10,7 +10,8 @@ disable_incompatible_pandas_accelerators()
 import pandas as pd
 
 
-ANALYTICS_DIR = "data/metadata_analytics"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ANALYTICS_DIR = str(_PROJECT_ROOT / "data" / "metadata_analytics")
 
 
 def get_dataset_analytics_dir(dataset_id: str) -> str:
@@ -199,13 +200,19 @@ def safe_read_parquet(path: str) -> pd.DataFrame:
 
     path_obj = Path(path)
 
+    if not path_obj.is_absolute():
+        path_obj = (_PROJECT_ROOT / path_obj).resolve()
+
     if not path_obj.exists():
+        print(f"[PARQUET NOT FOUND] {path_obj}")
         return pd.DataFrame()
 
     try:
-        return pd.read_parquet(path_obj, engine="pyarrow")
+        df = pd.read_parquet(path_obj, engine="pyarrow")
+        print(f"[PARQUET READ OK] {path_obj} -> {len(df)} rows")
+        return df
     except Exception as e:
-        print(f"[PARQUET READ ERROR] Could not read {path}: {e}")
+        print(f"[PARQUET READ ERROR] Could not read {path_obj}: {e}")
         return pd.DataFrame()
 
 
