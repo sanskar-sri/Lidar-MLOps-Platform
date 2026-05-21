@@ -614,6 +614,72 @@ def _tab_dataset():
     )
 
 
+def _preprocessing_workflow_card():
+    workflow_steps = [
+        "Raw Point Cloud Data",
+        "Read PLY / LAS / LAZ Files",
+        "Extract XYZ Coordinates and Point Attributes",
+        "Validate Required Fields",
+        "Apply Dataset-Specific Label Mapping",
+        "Generate Binary Labels: Building / Non-Building",
+        "Split Large Scenes into Spatial Blocks",
+        "Normalize Coordinates within Each Block",
+        "Sample Fixed Number of Points per Block",
+        "Save Model-Ready Training Data",
+        "Use for Model Training / Validation / Testing",
+    ]
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div("Workflow Reference", className="data-explorer-eyebrow"),
+                    html.H3("Preprocessing Workflow"),
+                    html.P(
+                        "The preprocessing workflow transforms raw LiDAR point cloud files into a "
+                        "structured and consistent format that deep learning models can consume directly. "
+                        "Raw point clouds are usually large, irregular, and dataset-specific, so the "
+                        "pipeline standardizes geometry, attributes, labels, and block size before training."
+                    ),
+                    html.P(
+                        "The script reads PLY, LAS, or LAZ files, extracts coordinates and attributes such "
+                        "as RGB, intensity, classification, or semantic labels, validates required fields, "
+                        "maps dataset labels into building and non-building classes, divides large scenes "
+                        "into spatial blocks, normalizes coordinates, samples a fixed number of points, and "
+                        "saves model-ready data for training, validation, and testing."
+                    ),
+                    html.Div(
+                        [
+                            html.Span("PointNet++"),
+                            html.Span("PointNet++ MSG"),
+                            html.Span("RandLA-Net"),
+                            html.Span("KPConv"),
+                            html.Span("DGCNN"),
+                            html.Span("PointNeXt"),
+                        ],
+                        className="preproc-workflow-models",
+                    ),
+                ],
+                className="preproc-workflow-copy",
+            ),
+            html.Ol(
+                [
+                    html.Li(
+                        [
+                            html.Span(f"{index:02d}", className="preproc-flow-index"),
+                            html.Span(step, className="preproc-flow-label"),
+                        ],
+                        className="preproc-flow-step",
+                    )
+                    for index, step in enumerate(workflow_steps, start=1)
+                ],
+                className="preproc-flow-list",
+            ),
+        ],
+        className="ops-review-card preproc-workflow-card",
+    )
+
+
 def _tab_parameters():
     return html.Div(
         [
@@ -628,6 +694,7 @@ def _tab_parameters():
                 ],
                 className="preproc-tab-head",
             ),
+            _preprocessing_workflow_card(),
             _section_label("Versioning and Output"),
             html.Div(
                 [
@@ -845,32 +912,11 @@ def _tab_execute():
             ),
             html.Div(
                 [
-                    html.Div(id="preproc-preflight-banner", className="ops-preflight-banner"),
-                    html.Div(
-                        "Start Preprocessing sends this JSON to the remote Airflow DAG. "
-                        "Dash only stores state and polls status — no local execution.",
-                        className="ops-execution-note",
-                    ),
-                    dbc.ButtonGroup(
-                        [
-                            dbc.Button("Save Trigger Payload", id="preproc-save-payload-button", color="secondary", outline=True),
-                            dbc.Button("Start Preprocessing", id="preproc-trigger-airflow-button", color="success", className="ops-trigger-button"),
-                        ],
-                        className="ops-action-group",
-                    ),
+                    dbc.Button("Start Preprocessing", id="preproc-trigger-airflow-button", color="success", className="ops-trigger-button"),
                 ],
                 className="ops-trigger-row",
             ),
             html.Div(id="preproc-action-message", className="mt-3"),
-            html.Hr(className="preproc-tab-divider"),
-            _section_label("Live Airflow Status"),
-            html.Div(
-                [
-                    html.Div("DAG Run Monitor", className="preproc-tab-head"),
-                    html.Div(id="preproc-airflow-status-panel"),
-                ],
-                className="preproc-tab-section",
-            ),
         ],
         className="preproc-tab-body",
     )
@@ -1303,16 +1349,6 @@ def update_segment_validation_badge(mode, num_segments, train_segments, val_segm
     return f"Validated: {train + val + test}/{total} segments assigned", "ops-validation-badge ops-validation-badge-ok"
 
 
-@callback(
-    Output("preproc-preflight-banner", "children"),
-    Output("preproc-preflight-banner", "className"),
-    Input("preproc-dataset-id", "value"),
-    Input("preproc-segment-validation", "className"),
-    Input("preproc-b2-output-prefix", "value"),
-)
-def update_preflight_banner(dataset_id, seg_class, b2_prefix):
-    return _preflight_banner(dataset_id, seg_class, b2_prefix)
-
 
 @callback(
     Output("preproc-storage-table", "data"),
@@ -1334,19 +1370,18 @@ def update_preprocessing_preview(*values):
     Output("preproc-action-message", "children"),
     Output("preproc-dag-run-store", "data"),
     Output("preproc-airflow-status-refresh", "disabled"),
-    Input("preproc-save-payload-button", "n_clicks"),
     Input("preproc-trigger-airflow-button", "n_clicks"),
     Input("preproc-quick-start-button", "n_clicks"),
     *_form_state_specs(),
     prevent_initial_call=True,
 )
-def handle_preprocessing_action(save_clicks, trigger_clicks, quick_clicks, *values):
+def handle_preprocessing_action(trigger_clicks, quick_clicks, *values):
     dataset_id = values[0]
     if not dataset_id:
         return dbc.Alert("Select or enter a dataset ID before creating an Airflow run.", color="warning"), dash.no_update, True
 
     button_id = dash.ctx.triggered_id
-    if button_id not in {"preproc-save-payload-button", "preproc-trigger-airflow-button", "preproc-quick-start-button"}:
+    if button_id not in {"preproc-trigger-airflow-button", "preproc-quick-start-button"}:
         raise PreventUpdate
 
     split_blocker = _segment_split_blocker(values[6], values[24], values[25], values[26], values[27])
@@ -1355,14 +1390,6 @@ def handle_preprocessing_action(save_clicks, trigger_clicks, quick_clicks, *valu
 
     try:
         conf = _build_conf_from_values(*values)
-        if button_id == "preproc-save-payload-button":
-            payload, payload_path = persist_airflow_request(conf)
-            return (
-                dbc.Alert([html.Strong("Trigger payload saved. "), html.Code(payload_path), html.Br(), "DAG run id: ", html.Code(payload["dag_run_id"])], color="success"),
-                dash.no_update,
-                True,
-            )
-
         payload, payload_path = persist_airflow_request(conf)
 
         # Only dataset_id, mode, and (if explicitly pinned) prep_version go to Airflow.
@@ -1416,7 +1443,6 @@ def handle_preprocessing_action(save_clicks, trigger_clicks, quick_clicks, *valu
 
 @callback(
     Output("preproc-airflow-status-store", "data"),
-    Output("preproc-airflow-status-panel", "children"),
     Output("preproc-airflow-status-refresh", "disabled", allow_duplicate=True),
     Input("preproc-airflow-status-refresh", "n_intervals"),
     Input("preproc-dag-run-store", "data"),
@@ -1425,12 +1451,12 @@ def handle_preprocessing_action(save_clicks, trigger_clicks, quick_clicks, *valu
 def poll_airflow_status(_ticks, dag_run):
     if not dag_run or not dag_run.get("dag_run_id") or dag_run.get("state") == "not_configured":
         status = dag_run or {}
-        return status, _status_panel(status), True
+        return status, True
 
     dag_id = dag_run.get("dag_id") or AIRFLOW_PREPROCESSING_DAG_ID or AIRFLOW_DAG_ID
     status = build_airflow_status_snapshot(dag_id, dag_run["dag_run_id"])
     terminal = status.get("state") in {"success", "failed"}
-    return status, _status_panel(status), terminal
+    return status, terminal
 
 
 @callback(

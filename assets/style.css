@@ -4876,6 +4876,110 @@ pre {
     margin-top: 24px;
 }
 
+.preproc-workflow-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+    gap: 22px;
+    margin-bottom: 26px;
+    border-radius: 8px;
+}
+
+.preproc-workflow-copy {
+    min-width: 0;
+}
+
+.preproc-workflow-copy .data-explorer-eyebrow {
+    margin-bottom: 8px;
+}
+
+.data-explorer-page .ops-review-card.preproc-workflow-card .preproc-workflow-copy h3 {
+    color: var(--de-text) !important;
+    font-size: 17px;
+    font-weight: 750;
+    letter-spacing: 0;
+    margin: 0 0 10px;
+    opacity: 1;
+    text-transform: none;
+}
+
+.preproc-workflow-copy p {
+    color: var(--de-muted);
+    font-size: 13px;
+    line-height: 1.65;
+    margin: 0 0 12px;
+}
+
+.preproc-workflow-models {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.preproc-workflow-models span {
+    border: 1px solid rgba(79, 179, 255, 0.16);
+    border-radius: 999px;
+    color: var(--de-text);
+    background: rgba(79, 179, 255, 0.06);
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1;
+    padding: 7px 10px;
+}
+
+.preproc-flow-list {
+    display: grid;
+    gap: 0;
+    list-style: none;
+    margin: 0;
+    padding: 4px 0 4px 18px;
+    border-left: 1px solid rgba(79, 179, 255, 0.22);
+}
+
+.preproc-flow-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+    color: var(--de-text);
+    font-size: 12px;
+}
+
+.preproc-flow-step::before {
+    content: "";
+    position: absolute;
+    left: -22px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--de-cyan);
+    box-shadow: 0 0 0 4px rgba(79, 179, 255, 0.10);
+}
+
+.preproc-flow-step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: -19px;
+    top: calc(50% + 8px);
+    width: 1px;
+    height: calc(100% - 16px);
+    background: rgba(79, 179, 255, 0.16);
+}
+
+.preproc-flow-index {
+    color: var(--de-green);
+    font-family: "Space Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.preproc-flow-label {
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+}
+
 /* ── Gold layer metrics ─────────────────────────────────────────────────── */
 
 .gold-split-grid {
@@ -5316,6 +5420,10 @@ pre {
 }
 
 @media (max-width: 900px) {
+    .preproc-workflow-card {
+        grid-template-columns: 1fr;
+    }
+
     .gold-split-grid {
         grid-template-columns: 1fr;
     }
