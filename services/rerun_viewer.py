@@ -33,6 +33,7 @@ import numpy as np
 
 rr = None
 rrb = None
+_grpc_sink_active: bool = False  # True when a live gRPC stream to the host viewer was opened
 
 
 RERUN_APP_NAME = "building_identification_mls_data_explorer"
@@ -85,34 +86,54 @@ def get_rerun_modules():
 # Recording lifecycle
 # ---------------------------------------------------------------------
 
+def _host_rerun_viewer_available(host: str = "host.docker.internal", port: int = 9876) -> bool:
+    """Return True if a Rerun Viewer is listening on the host at the given port."""
+    import socket
+    try:
+        with socket.create_connection((host, port), timeout=1.0):
+            return True
+    except Exception:
+        return False
+
+
 def init_recording(rrd_path: str, app_name: str = RERUN_APP_NAME, open_viewer: bool = False) -> None:
     """
-    Initialize Rerun.
+    Initialize Rerun recording.
 
-    If open_viewer=True:
-        stream to native Rerun Viewer and save .rrd file. Use this carefully for
-        large point clouds because the native viewer can consume significant memory.
-
-    If open_viewer=False:
-        save .rrd only.
-
-    Uses set_sinks so both Viewer streaming and file saving can work together.
+    Always saves to a .rrd file.  When running inside Docker, also adds a
+    GrpcSink pointing at the Mac Rerun Viewer (host.docker.internal:9876) so
+    data streams live into the already-open window during recording — no
+    post-recording transfer needed.
     """
+
+    global _grpc_sink_active
+    _grpc_sink_active = False
 
     rr_module, rrb_module = get_rerun_modules()
     os.makedirs(os.path.dirname(rrd_path), exist_ok=True)
 
     rr_module.init(app_name)
 
-    if open_viewer:
-        rr_module.set_sinks(
-            rr_module.GrpcSink(),
-            rr_module.FileSink(rrd_path),
-        )
+    file_sink = rr_module.FileSink(rrd_path)
+
+    if os.path.exists("/.dockerenv"):
+        # Inside Docker: stream data to the host Mac viewer if it's running.
+        # GrpcSink is the producer side — it pushes data TO the viewer's gRPC
+        # server (port 9876).  This is the correct direction; rerun --connect
+        # is the consumer side and does NOT push data to the viewer.
+        host_grpc = "rerun+http://host.docker.internal:9876/proxy"
+        if _host_rerun_viewer_available():
+            try:
+                rr_module.set_sinks(file_sink, rr_module.GrpcSink(host_grpc))
+                _grpc_sink_active = True
+            except Exception:
+                rr_module.set_sinks(file_sink)
+        else:
+            rr_module.set_sinks(file_sink)
+    elif open_viewer:
+        rr_module.set_sinks(file_sink, rr_module.GrpcSink())
     else:
-        rr_module.set_sinks(
-            rr_module.FileSink(rrd_path),
-        )
+        rr_module.set_sinks(file_sink)
 
     rr_module.send_blueprint(
         rrb_module.Blueprint(
@@ -625,6 +646,11 @@ def finalize_blueprint(
         )
     )
 
+    # Flush all pending messages to the FileSink before returning.
+    # FileSink writes asynchronously — without an explicit disconnect the .rrd
+    # file may be only partially written when open_saved_rrd tries to open it.
+    rr_module.disconnect()
+
 
 # ---------------------------------------------------------------------
 # Optional manual viewer opener
@@ -649,44 +675,31 @@ def open_saved_rrd(rrd_path: str) -> None:
     # Inside Docker there is no display to spawn a new viewer window.
     # /.dockerenv is the standard Docker runtime sentinel (absent on macOS/bare-metal).
     if os.path.exists("/.dockerenv"):
-        # The .rrd is inside the container at /app/data/rerun_outputs/<name>.
-        # The volume mapping in docker-compose is  ./data:/app/data  so the
-        # same file is accessible on the host at  ./data/rerun_outputs/<name>.
         rrd_filename = os.path.basename(rrd_path)
-        mac_rel_path = f"data/rerun_outputs/{rrd_filename}"
+        host_project_dir = os.environ.get("HOST_PROJECT_DIR", "").rstrip("/")
+        if host_project_dir:
+            mac_abs_path = f"{host_project_dir}/data/rerun_outputs/{rrd_filename}"
+        else:
+            mac_abs_path = f"data/rerun_outputs/{rrd_filename}"
 
-        # Attempt 1: stream directly to a Rerun Viewer already running on the host.
-        # Docker Desktop on macOS automatically maps host.docker.internal → Mac IP.
-        # If the user has run `rerun` on their Mac it is listening on port 9876.
-        host_grpc = "rerun+http://host.docker.internal:9876/proxy"
-        try:
-            result = subprocess.run(
-                [sys.executable, "-c",
-                 f"from rerun_cli.__main__ import main; import sys; "
-                 f"sys.argv = ['rerun', '--connect', {host_grpc!r}, {rrd_path!r}]; "
-                 f"main()"],
-                timeout=8,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode == 0:
-                return  # recording appeared in the host viewer
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-            pass
+        if _grpc_sink_active:
+            # Data was already streamed live to the host viewer via GrpcSink
+            # during recording — nothing more to do.
+            return
 
-        # Attempt 1 failed — guide the user to the two easy options.
+        # Viewer was not running when recording started.
+        # Guide the user to the two easiest options.
         raise RuntimeError(
-            f"Recording saved → ./{mac_rel_path}\n\n"
-            "To open automatically, use one of these options:\n\n"
-            "  Option A (easiest): run this on your Mac and keep it running —\n"
-            "    python watch_rerun.py\n"
-            "  New recordings open automatically whenever you click the button.\n\n"
-            "  Option B (instant streaming): start an empty Rerun window on your Mac —\n"
+            f"Recording saved → {mac_abs_path}\n\n"
+            "To open automatically next time:\n\n"
+            "  Option A — start an empty Rerun window on your Mac first:\n"
             "    rerun\n"
-            "  Then click 'Open in Rerun Viewer' again. The recording streams\n"
-            "  directly into the open window with no manual steps.\n\n"
-            "  Manual fallback —\n"
-            f"    rerun \"<project_root>/{mac_rel_path}\""
+            "  Then click 'Open in Rerun Viewer' again. Data streams live\n"
+            "  into the open window as the recording is generated.\n\n"
+            "  Option B — run the file watcher on your Mac:\n"
+            "    python watch_rerun.py\n"
+            "  New .rrd files are auto-opened whenever you click the button.\n\n"
+            f"  Manual: rerun \"{mac_abs_path}\""
         )
 
     # Resolve the rerun_sdk directory the same way _ensure_rerun_on_path does.

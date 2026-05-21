@@ -46,6 +46,7 @@ from services.preprocessing_service import (
     DEFAULT_VAL_SEGMENTS,
     build_airflow_conf,
     build_dataset_config,
+    build_minimal_trigger_conf,
     build_storage_contract,
     persist_airflow_request,
 )
@@ -630,7 +631,7 @@ def _tab_parameters():
             _section_label("Versioning and Output"),
             html.Div(
                 [
-                    _field("Preprocessing Version", dbc.Input(id="preproc-version", value="prep_v001", persistence=True, persistence_type="session")),
+                    _field("Preprocessing Version", dbc.Input(id="preproc-version", value="", placeholder="auto — workstation increments from last run", persistence=True, persistence_type="session")),
                     _field("Pipeline Version", dbc.Input(id="preproc-pipeline-version", value=DEFAULT_PIPELINE_VERSION, persistence=True, persistence_type="session")),
                     _field("Output Tier", dcc.Dropdown(
                         id="preproc-output-tier",
@@ -1318,6 +1319,7 @@ def update_preflight_banner(dataset_id, seg_class, b2_prefix):
     Output("preproc-parameter-summary-table", "data"),
     Output("preproc-conf-store", "data"),
     *FORM_INPUTS,
+    prevent_initial_call=True,
 )
 def update_preprocessing_preview(*values):
     try:
@@ -1362,6 +1364,17 @@ def handle_preprocessing_action(save_clicks, trigger_clicks, quick_clicks, *valu
             )
 
         payload, payload_path = persist_airflow_request(conf)
+
+        # Only dataset_id, mode, and (if explicitly pinned) prep_version go to Airflow.
+        # The workstation owns all other defaults and auto-increments prep_version.
+        pinned_prep_version = (values[7] or "").strip() or None
+        minimal_conf = build_minimal_trigger_conf(
+            dataset_id=dataset_id,
+            mode=values[6] or "train",
+            prep_version=pinned_prep_version,
+            run_id=payload["dag_run_id"],
+        )
+
         if not AIRFLOW_BASE_URL:
             return (
                 dbc.Alert(
@@ -1373,14 +1386,28 @@ def handle_preprocessing_action(save_clicks, trigger_clicks, quick_clicks, *valu
                     ],
                     color="warning",
                 ),
-                {"dag_id": conf["dag_id"], "dag_run_id": payload["dag_run_id"], "state": "not_configured"},
+                {
+                    "dag_id": conf["dag_id"],
+                    "dag_run_id": payload["dag_run_id"],
+                    "state": "not_configured",
+                    "b2_silver_prefix": _normalize_prefix(conf["script_args"].get("b2_silver_prefix")),
+                    "prep_version": conf.get("prep_version", ""),
+                },
                 True,
             )
 
-        result = trigger_airflow_preprocessing_dag(conf["dag_id"], conf)
+        result = trigger_airflow_preprocessing_dag(conf["dag_id"], minimal_conf)
         return (
             dbc.Alert([html.Strong("Airflow DAG triggered. "), "DAG run id: ", html.Code(result["dag_run_id"])], color="success"),
-            {"dag_id": result["dag_id"], "dag_run_id": result["dag_run_id"], "state": result.get("state", "queued")},
+            {
+                "dag_id": result["dag_id"],
+                "dag_run_id": result["dag_run_id"],
+                "state": result.get("state", "queued"),
+                # Carry the exact paths used at trigger time so verify callbacks
+                # don't silently use stale UI state if the user changes fields mid-run.
+                "b2_silver_prefix": _normalize_prefix(conf["script_args"].get("b2_silver_prefix")),
+                "prep_version": conf.get("prep_version", ""),
+            },
             False,
         )
     except Exception as exc:
@@ -1462,16 +1489,24 @@ def update_quick_start_button(dataset_id, status):
     State("preproc-dataset-id", "value"),
     State("preproc-version", "value"),
     State("preproc-b2-output-prefix", "value"),
+    State("preproc-dag-run-store", "data"),
     prevent_initial_call=True,
 )
-def verify_silver_outputs(manual_clicks, airflow_status, dataset_id, prep_version, b2_prefix):
+def verify_silver_outputs(manual_clicks, airflow_status, dataset_id, prep_version, b2_prefix, dag_run):
     triggered = dash.ctx.triggered_id
     if not dataset_id:
         raise PreventUpdate
     if triggered == "preproc-airflow-status-store" and (airflow_status or {}).get("state") != "success":
         raise PreventUpdate
 
-    prefix = _normalize_prefix(b2_prefix) or _standard_silver_prefix(dataset_id, prep_version)
+    # On auto-verify (DAG just succeeded), use the exact prefix stored at trigger
+    # time rather than live UI state — guards against mid-run UI edits.
+    if triggered == "preproc-airflow-status-store" and dag_run:
+        stored_prefix = (dag_run or {}).get("b2_silver_prefix", "")
+        prefix = stored_prefix or _normalize_prefix(b2_prefix) or _standard_silver_prefix(dataset_id, prep_version)
+    else:
+        prefix = _normalize_prefix(b2_prefix) or _standard_silver_prefix(dataset_id, prep_version)
+
     verification = verify_b2_silver_outputs(dataset_id, prefix)
     return verification, _verification_panel(verification)
 
@@ -1483,18 +1518,24 @@ def verify_silver_outputs(manual_clicks, airflow_status, dataset_id, prep_versio
     State("preproc-dataset-id", "value"),
     State("preproc-version", "value"),
     State("preproc-b2-output-prefix", "value"),
+    State("preproc-dag-run-store", "data"),
 )
-def render_output_layers(silver_status, dataset_id, prep_version, b2_prefix):
+def render_output_layers(silver_status, dataset_id, prep_version, b2_prefix, dag_run):
     if not silver_status:
         return (
             empty_state("Silver Layer analytics", "Verify Silver outputs to load real metadata and charts."),
             empty_state("Gold output contract", "Gold preview appears after the Silver readiness check has run."),
         )
 
-    prefix = _normalize_prefix(b2_prefix) or _standard_silver_prefix(dataset_id, prep_version)
+    # Prefer paths stored at trigger time over current UI state.
+    stored_prefix = (dag_run or {}).get("b2_silver_prefix", "")
+    stored_prep_version = (dag_run or {}).get("prep_version", "")
+    prefix = stored_prefix or _normalize_prefix(b2_prefix) or _standard_silver_prefix(dataset_id, prep_version)
+    effective_prep_version = stored_prep_version or prep_version or "prep_v001"
+
     silver_payload = load_local_or_b2_silver_metadata(dataset_id, prefix)
     readiness = compute_silver_readiness(silver_status, silver_payload)
-    silver = build_silver_layer_section(dataset_id, prep_version, prefix, silver_status, silver_payload)
-    gold_payload = load_gold_metadata_if_available(dataset_id, prep_version)
-    gold = build_gold_layer_section(dataset_id, prep_version, readiness, gold_payload=gold_payload)
+    silver = build_silver_layer_section(dataset_id, effective_prep_version, prefix, silver_status, silver_payload)
+    gold_payload = load_gold_metadata_if_available(dataset_id, effective_prep_version)
+    gold = build_gold_layer_section(dataset_id, effective_prep_version, readiness, gold_payload=gold_payload)
     return silver, gold

@@ -238,13 +238,19 @@ def generate_rerun_preview(
         except Exception as _read_exc:
             _evict_if_corrupted(local_tile_path, _read_exc)
 
-        validate_requested_mode(
+        effective_color_mode, fallback_note = resolve_color_mode_with_fallback(
             fields=fields,
             label_map=label_map,
             color_mode=color_mode,
             view_mode=view_mode,
             tile_name=tile_name,
         )
+
+        if effective_color_mode != color_mode:
+            selected_rerun_mode = get_selected_rerun_mode(
+                color_mode=effective_color_mode,
+                view_mode=view_mode,
+            )
 
         xyz_full = fields["xyz"]
 
@@ -331,10 +337,11 @@ def generate_rerun_preview(
                 "logged_points": int(len(xyz)),
                 "color_source": describe_selected_color_source(
                     fields=fields,
-                    color_mode=color_mode,
+                    color_mode=effective_color_mode,
                     view_mode=view_mode,
                     label_map_loaded=bool(label_map),
                 ),
+                "fallback_note": fallback_note,
                 "logged_modes": sorted(list(logged_modes.keys())),
                 "detected_columns": source_columns,
                 "visual_origin": [float(v) for v in visual_origin],
@@ -350,10 +357,28 @@ def generate_rerun_preview(
         available_modes=available_modes,
     )
 
+    all_fallback_notes = [
+        s["fallback_note"] for s in tile_summaries if s.get("fallback_note")
+    ]
+
+    # When running inside Docker the rrd_path is a container path (/app/data/...).
+    # Expose the equivalent host-side absolute path so the UI shows a command
+    # the user can run from any directory on their Mac.
+    rrd_filename = rrd_path.name
+    if os.path.exists("/.dockerenv"):
+        host_project_dir = os.environ.get("HOST_PROJECT_DIR", "").rstrip("/")
+        if host_project_dir:
+            mac_rrd_path = f"{host_project_dir}/data/rerun_outputs/{rrd_filename}"
+        else:
+            mac_rrd_path = f"data/rerun_outputs/{rrd_filename}"
+    else:
+        mac_rrd_path = str(rrd_path)
+
     return {
         "status": "success",
         "dataset_id": dataset_id,
         "rrd_path": str(rrd_path),
+        "mac_rrd_path": mac_rrd_path,
         "tiles_loaded": len(tile_summaries),
         "total_logged_points": int(total_logged_points),
         "color_mode": color_mode,
@@ -362,6 +387,7 @@ def generate_rerun_preview(
         "label_map_path": str(local_label_map_path) if local_label_map_path else "",
         "available_modes": sorted(list(available_modes)),
         "tile_summaries": tile_summaries,
+        "fallback_note": all_fallback_notes[0] if all_fallback_notes else None,
     }
 
 
@@ -803,27 +829,36 @@ def find_intensity_field(field_names: list[str]) -> str | None:
 # Validation
 # ---------------------------------------------------------------------
 
-def validate_requested_mode(
+def resolve_color_mode_with_fallback(
     fields: dict[str, Any],
     label_map: dict[str, dict[str, Any]],
     color_mode: str,
     view_mode: str,
     tile_name: str,
-) -> None:
+) -> tuple[str, str | None]:
     """
-    Fail early if the selected UI mode requires a real field that does not exist.
+    Resolve effective color mode, falling back gracefully when the requested
+    mode's source fields are absent in the tile.
+
+    Returns (effective_color_mode, fallback_note).
+    fallback_note is None when no fallback was needed.
+    Raises ValueError only for semantic modes that cannot be satisfied.
     """
+    fallback_note = None
 
     if color_mode == "rgb" and fields["rgb"] is None:
-        raise ValueError(
-            f"RGB mode selected, but tile {tile_name} has no real RGB fields."
+        fallback_note = (
+            f"Tile '{tile_name}' has no RGB fields — visualizing as Height/Z instead. "
+            "To use RGB mode, export a PLY/LAS with red/green/blue vertex properties."
         )
+        color_mode = "height"
 
-    if color_mode in {"intensity", "high_contrast"} and fields["intensity"] is None:
-        raise ValueError(
-            f"Intensity / Reflectance mode selected, but tile {tile_name} "
-            f"has no real intensity/reflectance field."
+    elif color_mode in {"intensity", "high_contrast"} and fields["intensity"] is None:
+        fallback_note = (
+            f"Tile '{tile_name}' has no intensity/reflectance field — visualizing as Height/Z instead. "
+            "To use Intensity mode, export a PLY/LAS with an intensity or reflectance channel."
         )
+        color_mode = "height"
 
     requires_semantic = (
         color_mode in {"semantic_label", "binary_label"}
@@ -832,13 +867,15 @@ def validate_requested_mode(
 
     if requires_semantic and fields["semantic_label"] is None:
         raise ValueError(
-            f"Semantic mode selected, but tile {tile_name} has no real semantic-label field."
+            f"Semantic mode selected, but tile '{tile_name}' has no real semantic-label field."
         )
 
     if requires_semantic and not label_map:
         raise ValueError(
-            f"Semantic mode selected, but no valid label map was loaded for tile {tile_name}."
+            f"Semantic mode selected, but no valid label map was loaded for tile '{tile_name}'."
         )
+
+    return color_mode, fallback_note
 
 
 # ---------------------------------------------------------------------

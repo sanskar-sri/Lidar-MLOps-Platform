@@ -1841,6 +1841,17 @@ def build_rerun_result_card(result: dict):
             )
         )
 
+    fallback_note = result.get("fallback_note")
+    fallback_alert = (
+        dbc.Alert(
+            [html.Strong("Color mode adjusted: "), fallback_note],
+            color="warning",
+            className="mb-2",
+        )
+        if fallback_note
+        else None
+    )
+
     return dbc.Card(
         dbc.CardBody(
             [
@@ -1852,15 +1863,16 @@ def build_rerun_result_card(result: dict):
                     ],
                     color="success",
                 ),
+                fallback_alert,
                 html.H5("Generated Rerun Recording"),
                 html.Div(
-                    [html.Strong("RRD file: "), html.Code(result.get("rrd_path", ""))],
+                    [html.Strong("RRD file (Mac): "), html.Code(result.get("mac_rrd_path") or result.get("rrd_path", ""))],
                     className="mb-2",
                 ),
                 html.Div(
                     [
-                        html.Strong("Open manually: "),
-                        html.Code(f'rerun "{result.get("rrd_path", "")}"'),
+                        html.Strong("Open manually on Mac: "),
+                        html.Code(f'rerun "{result.get("mac_rrd_path") or result.get("rrd_path", "")}"'),
                     ],
                     className="mb-3",
                 ),

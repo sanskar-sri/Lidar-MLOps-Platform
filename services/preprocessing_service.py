@@ -41,6 +41,26 @@ def _utc_run_id(dataset_id, prep_version):
     return f"{clean_dataset_id}_{clean_prep_version}_{timestamp}"
 
 
+def build_minimal_trigger_conf(dataset_id, mode="train", prep_version=None, run_id=None):
+    """Minimal conf sent to the remote Airflow DAG.
+
+    The workstation owns all defaults (voxel size, block size, workers, etc.).
+    prep_version is omitted when falsy so the workstation auto-increments from
+    the last successful gold run (→ prep_v001 on first run, prep_v002 next, …).
+    Only include it explicitly when the caller wants to pin/overwrite a version.
+    """
+    dataset_id = (dataset_id or "").strip()
+    run_id = run_id or _utc_run_id(dataset_id, prep_version or "auto")
+    conf = {
+        "dataset_id": dataset_id,
+        "mode": mode or "train",
+        "run_id": run_id,
+    }
+    if prep_version and prep_version.strip():
+        conf["prep_version"] = prep_version.strip()
+    return conf
+
+
 def get_preprocessing_script_info():
     script_path = Path(PREPROCESSING_SCRIPT_PATH)
     exists = script_path.exists()

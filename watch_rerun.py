@@ -22,7 +22,7 @@ import sys
 import time
 from pathlib import Path
 
-WATCH_DIR = Path(__file__).parent / "data" / "rerun_outputs"
+WATCH_DIR = Path(__file__).resolve().parent / "data" / "rerun_outputs"
 POLL_SECS = 1.0
 
 
@@ -30,7 +30,7 @@ def _find_rerun() -> str | None:
     import shutil
     if cmd := shutil.which("rerun"):
         return cmd
-    venv = Path(__file__).parent / ".venvvv" / "bin" / "rerun"
+    venv = Path(__file__).resolve().parent / ".venvvv" / "bin" / "rerun"
     if venv.exists():
         return str(venv)
     return None
