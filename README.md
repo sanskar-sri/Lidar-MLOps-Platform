@@ -1,334 +1,275 @@
-# LiDAR Data Platform — Controller Dashboard
+# LiDAR Data Platform
 
-A Dash-based operations dashboard that orchestrates the full MLS (Mobile LiDAR Scanning) pipeline —
-from raw data upload through preprocessing execution. The app does **not** run heavy compute locally.
-It manages data, builds payloads, and delegates execution to remote infrastructure.
+An end-to-end geospatial data engineering and MLOps platform for managing mobile LiDAR point clouds, preparing model-ready datasets, and orchestrating building / non-building segmentation workflows.
 
----
+This project is built around a practical smart-city problem: raw LiDAR files are large, unstructured, difficult to inspect, and not directly ready for machine learning. The platform turns those files into a governed data lake workflow with dataset registration, metadata analytics, preprocessing orchestration, Silver / Gold artifact validation, training handoff, and experiment-tracking integration.
 
-## What Has Been Built
+## What This Project Demonstrates
 
-### Stage 1 — Raw Data Intake (Bronze Layer)
+- Cloud-portable LiDAR data lake design using Bronze, Silver, and Gold layers
+- Raw `.ply`, `.las`, and `.laz` point-cloud intake with checksum and manifest tracking
+- Dataset registry generation with metadata, label summaries, spatial summaries, and quality checks
+- Dash-based operations UI for data upload, dataset exploration, preprocessing control, training monitoring, and compute health
+- Airflow-triggered preprocessing pipelines for remote workstation / GPU-worker execution
+- Model-ready dataset generation for PointNet++ / PointNet++ MSG / RandLA-Net style blocks and Pointcept / PTv3 style scenes
+- MLflow and DVC integration points for reproducible machine learning workflows
+- 3D visualization support for inspecting point-cloud data before and after processing
 
-- Upload raw `.ply` / `.las` / `.laz` point-cloud tiles and `.xml` label maps to **Backblaze B2**
-- Two upload modes:
-  - **Admin path** — folder already mounted in the container (`/datasets/`) → uploads directly to B2, no browser staging
-  - **Browser upload** — user's files streamed in resumable chunks → assembled on server → pushed to B2
-- Per-file SHA-1 checksum verification after every upload
-- Upload and checksum manifests written to B2 (`bronze_raw_data/<dataset_id>/manifests/`)
-- Upload progress persisted to `data/upload_progress/<dataset_id>.json`
-- After upload: automatic metadata extraction from local tile copies (no re-download from B2)
+## Business Problem
 
-### Stage 2 — Dataset Registration and Analytics
+Cities, infrastructure teams, and geospatial companies increasingly use LiDAR and 3D mapping to build digital twins, monitor assets, assess disaster exposure, and support urban planning. A segmentation model alone is not enough for this workflow. Real teams need a platform that can ingest raw survey data, track where it came from, validate it, preprocess it consistently, and produce model-ready datasets that can be reproduced later.
 
-- Tiles are profiled: point counts, bounding boxes, attribute columns, label histograms, class mappings
-- Nine analytics Parquet files written locally and pushed to B2:
-  - `file_summary`, `attribute_summary`, `label_distribution`, `class_label_distribution`
-  - `spatial_summary`, `dashboard_kpis`, `quality_checks`, `class_mapping`, `class_mapping_summary`
-- Dataset registry JSON written locally and to `b2://Building-Identification-MLS/metadata/datasets/<dataset_id>.json`
-- Data Explorer dashboard renders live analytics charts from local Parquet cache
+This platform supports use cases such as:
 
-### Stage 3 — Preprocessing Trigger (Silver + Gold)
+- Urban digital twin preparation
+- Smart-city mapping and 3D city model enrichment
+- Building inventory generation
+- Road and infrastructure asset monitoring
+- Flood exposure and disaster-risk analysis
+- Urban planning and development control
+- Geospatial AI-ready data management
+- Automated LiDAR-based building identification
 
-- Mac UI sends a **minimal conf** to the remote Airflow DAG:
-  ```json
-  { "dataset_id": "fui9", "mode": "train", "run_id": "fui9_prep_v001_..." }
-  ```
-  The workstation owns all defaults (voxel size, block size, workers, splits, etc.)
-- `prep_version` is omitted by default — workstation auto-increments from last successful run (`prep_v001` on first run)
-- Full conf (all ~50 parameters) is still persisted locally to `data/airflow_preprocessing_requests/` for audit
-- After trigger: 5-second polling of Airflow REST API for DAG run status and task progress
-- On DAG success: automatic Silver artifact verification against B2
-- Silver and Gold output sections unlock with real metadata from B2
+## Why a Data Platform Is Needed
 
----
+Raw LiDAR data is not directly usable for production machine learning. A real workflow has to solve several engineering problems before model training starts:
 
-## Tech Stack
+- Point-cloud files can be very large and expensive to move repeatedly
+- Raw `.ply`, `.las`, and `.laz` files have dataset-specific schemas, labels, and attributes
+- Metadata, lineage, checksums, and quality checks are required for trust and repeatability
+- Model training needs consistent blocks, splits, feature channels, labels, and dataset contracts
+- Operators need 3D visualization before and after preprocessing
+- Long-running preprocessing should be orchestrated outside the UI by Airflow or a worker system
+- Experiments and datasets should be tracked through MLflow and DVC
 
-### Dashboard (this repo)
+The project is therefore positioned as a geospatial data engineering and MLOps platform, not only as a deep learning model repository.
 
-| Layer | Technology |
-|---|---|
-| UI framework | [Dash 2.x](https://dash.plotly.com/) + [Dash Bootstrap Components](https://dash-bootstrap-components.opensource.faculty.ai/) |
-| Charts | Plotly |
-| Language | Python 3.11 |
-| Data handling | Pandas, PyArrow (Parquet) |
-| Point cloud reading | Open3D, plyfile, laspy + lazrs |
-| 3D visualization | [Rerun SDK](https://rerun.io/) |
-| Config | python-dotenv |
+## Architecture
 
-### Storage
-
-| Layer | Technology |
-|---|---|
-| Data lake | [Backblaze B2](https://www.backblaze.com/cloud-storage) (`Building-Identification-MLS` bucket) |
-| B2 SDK | b2sdk (native) + boto3/s3 (S3-compatible fallback) |
-| Local cache | `data/` directory (mounted as Docker volume) |
-
-### Orchestration (remote)
-
-| Layer | Technology |
-|---|---|
-| Pipeline scheduler | Apache Airflow (remote workstation) |
-| Preprocessing script | `preprocess_mls_v9_compat.py` — runs on GPU worker |
-| Experiment tracking | MLflow (`http://100.90.110.60:5001`) |
-| Data versioning | DVC (`b2remote`) |
-
-### Infrastructure
-
-| Layer | Technology |
-|---|---|
-| Containerisation | Docker + Docker Compose |
-| Dash container | `lidar-dash` on port `8051` |
-| MLflow container | `lidar-mlflow` on port `5001` |
-| Host dataset mount | `/Users/sanskarsrivastava/Desktop/Datasets` → `/datasets` inside container |
-
----
-
-## Data Architecture (Medallion)
-
+```mermaid
+flowchart LR
+    A["Raw LiDAR files<br/>PLY / LAS / LAZ"] --> B["Bronze layer<br/>source files + manifests"]
+    B --> C["Dataset registry<br/>metadata + analytics"]
+    C --> D["Dash control plane<br/>upload, explore, trigger, monitor"]
+    D --> E["Airflow preprocessing DAG<br/>remote workstation / GPU worker"]
+    E --> F["Silver layer<br/>cleaned point cloud + stats"]
+    F --> G["Gold layer<br/>model-ready blocks + scenes"]
+    G --> H["Training workflow<br/>PointNet++ / RandLA-Net / PTv3-ready data"]
+    H --> I["MLflow + DVC<br/>experiments + versioned outputs"]
 ```
-B2 Bucket: Building-Identification-MLS
-│
+
+## Data Lake Layout
+
+```text
+object-storage-bucket/
 ├── bronze_raw_data/<dataset_id>/
-│   ├── source_files/tiles/          ← raw .ply / .las / .laz tiles
-│   ├── source_files/label_maps/     ← .xml label mapping files
-│   └── manifests/                   ← upload_manifest.json, checksum_manifest.json
-│
-├── metadata/datasets/<dataset_id>.json        ← dataset registry
-├── metadata_analytics/<dataset_id>/           ← 9x Parquet analytics files
-│
+│   ├── source_files/tiles/
+│   ├── source_files/label_maps/
+│   └── manifests/
+├── metadata/datasets/<dataset_id>.json
+├── metadata_analytics/<dataset_id>/
+│   ├── file_summary.parquet
+│   ├── attribute_summary.parquet
+│   ├── label_distribution.parquet
+│   ├── class_label_distribution.parquet
+│   ├── spatial_summary.parquet
+│   ├── dashboard_kpis.parquet
+│   ├── quality_checks.parquet
+│   ├── class_mapping.parquet
+│   └── class_mapping_summary.parquet
 ├── silver_preprocessed_data/<dataset_id>/<prep_version>/
-│   ├── processed_cloud_meta.json
-│   ├── silver_stats.json
-│   └── silver_density_grid.parquet
-│
+│   ├── analytics/
+│   │   ├── processed_cloud_meta.json
+│   │   ├── silver_stats.json
+│   │   └── silver_density_grid.parquet
+│   └── processed point-cloud artifacts
 ├── gold_model_ready_data/<dataset_id>/<prep_version>/
-│   ├── training/ptv3/               ← PTv3 / Pointcept scenes
-│   ├── training/traditional/blocks/ ← PointNet++ / RandLA-Net blocks
-│   ├── artifacts/meta/              ← label_map, splits, dataset_stats, contract
-│   └── artifacts/eval/              ← split_stats, density_report, class_weights
-│
-└── logs/<dataset_id>/<run_id>/      ← preprocessing run logs
+│   ├── training/ptv3/
+│   ├── training/traditional/blocks/
+│   ├── artifacts/meta/
+│   └── artifacts/eval/
+└── logs/<dataset_id>/<run_id>/
 ```
 
----
+## Platform Workflow
 
-## Pages
+1. Upload raw point-cloud files and label maps.
+2. Verify file integrity with checksums and upload manifests.
+3. Generate dataset metadata, spatial summaries, class mappings, and quality checks.
+4. Explore datasets through the dashboard and analytics panels.
+5. Trigger preprocessing through Airflow using a minimal run configuration.
+6. Poll Airflow for DAG state, task progress, and failure detail.
+7. Verify Silver outputs after preprocessing completes.
+8. Unlock Gold model-ready outputs when the dataset contract is available.
+9. Monitor training jobs and connect outputs to MLflow / DVC workflows.
+
+## Main Application Pages
 
 | Page | Path | Purpose |
 |---|---|---|
-| Home | `/` | Platform overview and live health |
-| Data Explorer | `/data-explorer` | Upload raw data, browse datasets, view analytics |
+| Home | `/` | Platform overview and service health |
+| Data Explorer | `/data-explorer` | Upload raw LiDAR data, browse registered datasets, and inspect analytics |
 | Preprocessing | `/preprocessing` | Configure and trigger Airflow preprocessing runs |
-| Training | `/training` | Monitor remote training jobs |
-| Postprocessing | `/postprocessing` | Review model outputs |
-| Control Panel | `/control-panel` | Compute node health, service status |
+| Training | `/training` | Monitor model training workflows |
+| Postprocessing | `/postprocessing` | Review downstream model outputs |
+| Control Panel | `/control-panel` | Check compute nodes, service status, and runtime health |
 
----
+## Preprocessing Control Flow
 
-## Callback Wiring (Preprocessing Page)
-
-```
-[User clicks Start Preprocessing]
-        │
-        ▼
-handle_preprocessing_action()
-  ├── builds full conf (display + local record)
-  ├── saves to data/airflow_preprocessing_requests/<run_id>.json
-  ├── builds minimal conf {dataset_id, mode, run_id}
-  ├── POST /api/v1/dags/lidar_preprocessing_pipeline/dagRuns  → Airflow
-  └── dag_run_store ← {dag_id, dag_run_id, state, b2_silver_prefix, prep_version}
-        │
-        ▼ (every 5s)
-poll_airflow_status()
-  ├── GET /api/v1/dags/.../dagRuns/<run_id>       → DAG state
-  ├── GET /api/v1/dags/.../taskInstances          → task progress
-  ├── updates airflow_status_store + progress UI
-  └── disables interval on success / failed
-        │
-        ▼ (on state == "success")
-verify_silver_outputs()          ← auto-triggered, uses b2_silver_prefix from dag_run_store
-  ├── lists B2 silver prefix
-  ├── checks for processed_cloud_meta.json, silver_stats.json, silver_density_grid.parquet
-  └── silver_status_store ← {status, rows, verified_count}
-        │
-        ▼
-render_output_layers()
-  ├── loads Silver metadata + Parquet from local cache or B2
-  ├── computes silver readiness (gates gold unlock)
-  ├── renders Silver analytics section
-  └── renders Gold output contract (planned → generated as files appear)
+```text
+User clicks Start Preprocessing
+  -> handle_preprocessing_action()
+  -> save full local audit payload under data/airflow_preprocessing_requests/
+  -> build minimal Airflow conf: {dataset_id, mode, run_id}
+  -> POST /api/v1/dags/lidar_preprocessing_pipeline/dagRuns
+  -> store dag_id, dag_run_id, state, b2_silver_prefix, prep_version
+  -> poll Airflow DAG/task status every few seconds
+  -> verify Silver outputs from B2 after successful DAG completion
+  -> render Silver analytics and Gold output readiness
 ```
 
----
+The Dash controller does not run heavy preprocessing locally. It creates payloads, triggers Airflow, polls status, and reads generated artifacts from object storage or local cache.
 
-## Airflow DAGs (on remote workstation)
+## Airflow DAGs
 
 | DAG | Schedule | Purpose |
 |---|---|---|
-| `lidar_preprocessing_pipeline` | Triggered manually | Runs `preprocess_mls_v9_compat.py` on GPU worker |
-| `dag_health_b2` | Every 90s | B2 reachability and prefix listing check |
-| `dag_health_remote` | Every 90s | MLflow, DVC, GPU (nvidia-smi), OS health check |
+| `lidar_preprocessing_pipeline` | Triggered manually | Runs preprocessing on the remote worker environment |
+| `lidar_training_pipeline` | Triggered manually | Runs model training against Gold model-ready data |
+| `dag_health_b2` | Scheduled | B2 reachability and prefix listing check |
+| `dag_health_remote` | Scheduled | MLflow, DVC, GPU, OS, and runtime health check |
 
----
+## Technical Stack
+
+| Area | Technologies |
+|---|---|
+| UI and application | Python, Dash, Dash Bootstrap Components, Plotly |
+| Point-cloud processing support | Open3D, plyfile, laspy, lazrs |
+| Analytics storage | Pandas, PyArrow, Parquet |
+| Object storage | Backblaze B2 / S3-compatible storage patterns |
+| Orchestration | Apache Airflow |
+| Experiment tracking | MLflow |
+| Dataset versioning | DVC |
+| Visualization | Rerun SDK |
+| Deployment | Docker, Docker Compose, environment-based configuration |
+
+## Model-Ready Dataset Support
+
+The platform is designed to prepare LiDAR data for multiple 3D segmentation architectures:
+
+| Model family | Purpose |
+|---|---|
+| PointNet++ | Hierarchical point-based baseline |
+| PointNet++ MSG | Multi-scale grouping baseline for local geometric variation |
+| RandLA-Net | Efficient large-scale point-cloud segmentation baseline |
+| Point Transformer / Pointcept-style data | Advanced transformer-ready scene format |
+
+This makes the platform useful for benchmarking both classical point-based segmentation models and modern transformer-style 3D segmentation workflows.
+
+## Repository Structure
+
+```text
+.
+├── app.py                         # Dash app entrypoint
+├── pages/                         # Dashboard pages
+├── components/                    # Reusable UI sections and cards
+├── services/                      # B2, metadata, Airflow, MLflow, training, and visualization services
+├── airflow_dags/                  # Health-check DAGs and Airflow deployment notes
+├── scripts/                       # Compute-node health agent utilities
+├── assets/                        # Styling and browser-upload JavaScript
+├── data/metadata/                 # Local dataset registry cache
+├── data/metadata_analytics/       # Local analytics Parquet cache
+├── Dockerfile
+├── docker-compose.yml
+└── requirements.txt
+```
 
 ## Local Development
 
 ```bash
-# Create and activate virtualenv
 python3 -m venv .venvvv
 source .venvvv/bin/activate
 pip install -r requirements.txt
 
-# Copy and fill in credentials
-cp .env.example .env   # set B2_KEY_ID, B2_APPLICATION_KEY, AIRFLOW_BASE_URL, etc.
-
-# Run via Docker (recommended)
+cp .env.example .env
 docker compose up --build
-# App: http://localhost:8051
-# MLflow: http://localhost:5001
 ```
 
-### Required `.env` keys
+Default local services:
 
-```
+| Service | URL |
+|---|---|
+| Dash app | `http://localhost:8051` |
+| MLflow | `http://localhost:5001` |
+
+## Required Configuration
+
+Create a `.env` file from `.env.example` and provide environment-specific values:
+
+```text
 B2_KEY_ID=
 B2_APPLICATION_KEY=
-B2_BUCKET_NAME=Building-Identification-MLS
-AIRFLOW_BASE_URL=http://<airflow-host>:8080
+B2_BUCKET_NAME=
+AIRFLOW_API_BASE_URL=
 AIRFLOW_USERNAME=
 AIRFLOW_PASSWORD=
-MLFLOW_TRACKING_URI=http://100.90.110.60:5001
+MLFLOW_TRACKING_URI=
+MLFLOW_PUBLIC_URL=
+SYSTEM_1_HEALTH_URL=
+SYSTEM_1_AIRFLOW_QUEUE=
 ```
 
----
+Private machine names, workstation IPs, credentials, and local filesystem paths should stay outside the public README and be managed through `.env`, deployment notes, or private runbooks.
 
-## Windows Workstation — Network Connection Runbook
+## Windows Workstation Runtime Checks
 
-The Mac dashboard connects to the Windows workstation (`100.88.150.103`) over **Tailscale VPN** for three services:
-
-| Service | Port | URL |
-|---|---|---|
-| Airflow | 8080 | `http://100.88.150.103:8080` |
-| MLflow | 5003 | `http://100.88.150.103:5003` |
-| Health Agent | 8899 | `http://100.88.150.103:8899/health` |
-
----
-
-### Step 1 — Check Tailscale status from the Mac
+When the Dash controller uses a Windows workstation as the Airflow/runtime host, verify these services from the controller machine:
 
 ```bash
-tailscale status
+curl -s "$AIRFLOW_API_BASE_URL/health"
+curl -s "$MLFLOW_PUBLIC_URL/health"
+curl -s "$SYSTEM_1_HEALTH_URL"
 ```
 
-Expected: the Windows machine (`desktop-ee03g5b`, `100.88.150.103`) appears as **active**.
+Expected behavior:
 
-If it shows `offline` or is missing: open the Tailscale app on Windows and sign in.
+- Airflow returns healthy metadatabase and scheduler status.
+- MLflow returns a healthy response from its tracking server endpoint.
+- The compute health agent returns JSON with `status`, `node_id`, `airflow_queue`, runtime details, and optional GPU metrics.
 
----
+If Airflow and MLflow are reachable but the compute node is offline, restart the workstation health agent and confirm the configured health-agent port is listening and allowed through the workstation firewall.
 
-### Step 2 — Restart Tailscale on Windows (always do this first)
+## Public Portfolio Highlights
 
-Even when `tailscale status` shows "active", the relay can stop forwarding TCP traffic.
-Restarting always fixes it:
+This repository is useful as a portfolio project because it shows more than model training:
 
-```powershell
-# Run in PowerShell as Administrator on Windows
-Restart-Service -Name Tailscale
-```
+- Data engineering: governed object-storage layout, metadata registry, Parquet analytics, checksums, and lineage
+- MLOps: Airflow orchestration, MLflow tracking hooks, DVC versioning hooks, reproducible run payloads
+- Geospatial AI: LiDAR ingestion, point-cloud analytics, Silver / Gold data contracts, 3D visualization
+- Platform engineering: service-based Dash architecture, remote worker integration, health checks, runtime monitoring
+- Product thinking: dashboard pages for operators, dataset readiness, preprocessing status, and model workflow monitoring
 
----
+## Current Scope
 
-### Step 3 — Add Windows Firewall rules (one-time, but check if missing)
+This repository contains the data-platform and control-plane layer. It integrates with companion preprocessing and training workflows that run heavier GPU workloads outside the dashboard process.
 
-These three rules must exist in Windows Defender Firewall. Run once in an **Admin PowerShell**:
-
-```powershell
-New-NetFirewallRule -DisplayName "Tailscale Airflow"     -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
-New-NetFirewallRule -DisplayName "Tailscale MLflow"      -Direction Inbound -Protocol TCP -LocalPort 5003 -Action Allow
-New-NetFirewallRule -DisplayName "Tailscale HealthAgent" -Direction Inbound -Protocol TCP -LocalPort 8899 -Action Allow
-```
-
-To verify rules exist:
-```powershell
-Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Tailscale*" } | Select-Object DisplayName, Enabled
-```
-
----
-
-### Step 4 — Verify services are listening on the network (not just localhost)
-
-```powershell
-netstat -an | findstr " :8080 "
-netstat -an | findstr " :5003 "
-netstat -an | findstr " :8899 "
-```
-
-You must see `0.0.0.0:8080`, `0.0.0.0:5003`, `0.0.0.0:8899` as **LISTENING**.
-If you see `127.0.0.1:8080` only, Docker is binding to localhost — restart the Docker containers.
-
----
-
-### Step 5 — Start the Health Agent on Windows
-
-The health agent is **not auto-started** — it must be launched manually after each reboot.
-
-Script location: `D:\compute_node_health_agent.py`
-
-**Visible (to confirm it works):**
-```powershell
-python "D:\compute_node_health_agent.py"
-```
-
-Expected startup output:
-```
-Collecting initial metrics...
-Metrics refreshing every 8s in background.
-Compute health agent listening on http://0.0.0.0:8899/health
-```
-
-**Hidden (background, survives closing PowerShell):**
-```powershell
-Start-Process python -ArgumentList '"D:\compute_node_health_agent.py"' -WindowStyle Hidden
-```
-
----
-
-### Step 6 — Verify from the Mac
-
-Run these three checks from the Mac terminal:
-
-```bash
-# Airflow — should return JSON with "metadatabase": {"status": "healthy"}
-curl -s -u airflow:airflow http://100.88.150.103:8080/health
-
-# MLflow — should return: OK
-curl -s http://100.88.150.103:5003/health
-
-# Health Agent — should return JSON with "status": "ok" and GPU details
-curl -s http://100.88.150.103:8899/health
-```
-
----
-
-### Quick Diagnosis Table
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `curl` times out on all three ports | Tailscale relay stopped | Step 2: restart Tailscale on Windows |
-| `tailscale status` shows Windows as offline | Tailscale not running on Windows | Open Tailscale app on Windows |
-| Port reachable but service returns error | Docker container down | Restart containers on Windows |
-| Port 8899 connection refused | Health agent not running | Step 5: start health agent |
-| Port shows `127.0.0.1` in netstat, not `0.0.0.0` | Docker bound to localhost | Restart Docker containers on Windows |
-| Firewall rules missing after Windows update | Rules may be reset | Step 3: re-add firewall rules |
-
----
+Large raw LiDAR files, generated Silver / Gold artifacts, model checkpoints, and private credentials should not be committed to the repository.
 
 ## Key Bugs Fixed
 
 | Bug | Root cause | Fix |
 |---|---|---|
-| `IndexError: list index out of range` (HTTP 500 on preprocessing page) | `update_preprocessing_preview` fired on initial page load before all 38 tab inputs were initialized | Added `prevent_initial_call=True` |
-| Verify section used stale UI state if user changed fields after trigger | `dag_run_store` didn't carry `b2_silver_prefix` or `prep_version` | Store both at trigger time; verify callbacks prefer stored values |
-| Airflow trigger sent full ~50-field conf | Remote workstation expected minimal conf and owns its own defaults | Mac now sends `{dataset_id, mode, run_id}`; workstation handles everything else |
+| Preprocessing page could return HTTP 500 during early callback initialization | Preview callbacks fired before all tab inputs were initialized | Added callback guards and delayed preview initialization |
+| Verify section used stale UI state if users edited fields after trigger | DAG run store did not carry output prefix/version details | Store run-specific `b2_silver_prefix` and `prep_version` at trigger time |
+| Airflow trigger sent an overly broad controller payload | Remote workstation owns pipeline defaults | Send minimal conf to Airflow while persisting the full controller audit payload locally |
+| Silver readers missed current DAG output layout | Current DAG writes key Silver analytics into an `analytics/` subfolder | Silver metadata loaders now try `analytics/` first and retain flat-path fallback |
+
+## Roadmap
+
+- Add a public benchmark report with committed model metrics and dataset summaries
+- Add CI checks for service imports, page registration, and metadata parsing
+- Add business KPI dashboard for dataset readiness, processing cost, and storage growth
+- Add GIS export support for GeoJSON, GeoParquet, CityJSON, and 3D Tiles
+- Add model comparison dashboard with accuracy, IoU, latency, and confidence summaries
+- Add failure diagnostics for preprocessing runs
+- Add cloud reference architecture with cost-aware AWS / GCP deployment options
