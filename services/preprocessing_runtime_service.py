@@ -52,19 +52,20 @@ EXPECTED_SILVER_OUTPUTS = [
     {
         "id": "processed_cloud_meta",
         "label": "processed_cloud_meta.json",
-        "candidates": ["processed_cloud_meta.json"],
+        # DAG writes into analytics/ sub-folder; keep flat path as legacy fallback.
+        "candidates": ["analytics/processed_cloud_meta.json", "processed_cloud_meta.json"],
         "required": True,
     },
     {
         "id": "silver_stats",
         "label": "silver_stats.json",
-        "candidates": ["silver_stats.json"],
+        "candidates": ["analytics/silver_stats.json", "silver_stats.json"],
         "required": True,
     },
     {
         "id": "silver_density_grid",
         "label": "silver_density_grid.parquet",
-        "candidates": ["silver_density_grid.parquet"],
+        "candidates": ["analytics/silver_density_grid.parquet", "silver_density_grid.parquet"],
         "required": True,
     },
 ]
@@ -598,6 +599,22 @@ def load_b2_parquet_file(b2_key):
         return {"data": None, "b2_key": b2_key, "local_path": str(local_path), "error": str(exc)}
 
 
+def _load_silver_json(local_path, prefix, filename):
+    """Try analytics/ sub-folder first (current DAG layout), fall back to flat prefix."""
+    result = _load_local_or_b2_json(local_path, _join_key(prefix, f"analytics/{filename}"))
+    if result.get("data") is not None:
+        return result
+    return _load_local_or_b2_json(local_path, _join_key(prefix, filename))
+
+
+def _load_silver_parquet(local_path, prefix, filename):
+    """Try analytics/ sub-folder first (current DAG layout), fall back to flat prefix."""
+    result = _load_local_or_b2_parquet(local_path, _join_key(prefix, f"analytics/{filename}"))
+    if result.get("data") is not None:
+        return result
+    return _load_local_or_b2_parquet(local_path, _join_key(prefix, filename))
+
+
 def _load_local_or_b2_json(local_path, b2_key):
     try:
         data = _read_local_json(local_path)
@@ -647,18 +664,9 @@ def load_local_or_b2_silver_metadata(dataset_id, b2_prefix):
 
     prefix = _normalize_prefix(b2_prefix) or f"silver_preprocessed_data/{dataset_id}/prep_v001"
     local_dir = _local_silver_dir(dataset_id, prefix)
-    meta_result = _load_local_or_b2_json(
-        local_dir / "processed_cloud_meta.json",
-        _join_key(prefix, "processed_cloud_meta.json"),
-    )
-    stats_result = _load_local_or_b2_json(
-        local_dir / "silver_stats.json",
-        _join_key(prefix, "silver_stats.json"),
-    )
-    density_result = _load_local_or_b2_parquet(
-        local_dir / "silver_density_grid.parquet",
-        _join_key(prefix, "silver_density_grid.parquet"),
-    )
+    meta_result = _load_silver_json(local_dir / "processed_cloud_meta.json", prefix, "processed_cloud_meta.json")
+    stats_result = _load_silver_json(local_dir / "silver_stats.json", prefix, "silver_stats.json")
+    density_result = _load_silver_parquet(local_dir / "silver_density_grid.parquet", prefix, "silver_density_grid.parquet")
 
     density_df = density_result.get("data")
     density_columns = set(list(getattr(density_df, "columns", []))) if density_df is not None else set()

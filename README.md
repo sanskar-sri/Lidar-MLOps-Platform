@@ -204,6 +204,127 @@ MLFLOW_TRACKING_URI=http://100.90.110.60:5001
 
 ---
 
+## Windows Workstation — Network Connection Runbook
+
+The Mac dashboard connects to the Windows workstation (`100.88.150.103`) over **Tailscale VPN** for three services:
+
+| Service | Port | URL |
+|---|---|---|
+| Airflow | 8080 | `http://100.88.150.103:8080` |
+| MLflow | 5003 | `http://100.88.150.103:5003` |
+| Health Agent | 8899 | `http://100.88.150.103:8899/health` |
+
+---
+
+### Step 1 — Check Tailscale status from the Mac
+
+```bash
+tailscale status
+```
+
+Expected: the Windows machine (`desktop-ee03g5b`, `100.88.150.103`) appears as **active**.
+
+If it shows `offline` or is missing: open the Tailscale app on Windows and sign in.
+
+---
+
+### Step 2 — Restart Tailscale on Windows (always do this first)
+
+Even when `tailscale status` shows "active", the relay can stop forwarding TCP traffic.
+Restarting always fixes it:
+
+```powershell
+# Run in PowerShell as Administrator on Windows
+Restart-Service -Name Tailscale
+```
+
+---
+
+### Step 3 — Add Windows Firewall rules (one-time, but check if missing)
+
+These three rules must exist in Windows Defender Firewall. Run once in an **Admin PowerShell**:
+
+```powershell
+New-NetFirewallRule -DisplayName "Tailscale Airflow"     -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
+New-NetFirewallRule -DisplayName "Tailscale MLflow"      -Direction Inbound -Protocol TCP -LocalPort 5003 -Action Allow
+New-NetFirewallRule -DisplayName "Tailscale HealthAgent" -Direction Inbound -Protocol TCP -LocalPort 8899 -Action Allow
+```
+
+To verify rules exist:
+```powershell
+Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Tailscale*" } | Select-Object DisplayName, Enabled
+```
+
+---
+
+### Step 4 — Verify services are listening on the network (not just localhost)
+
+```powershell
+netstat -an | findstr " :8080 "
+netstat -an | findstr " :5003 "
+netstat -an | findstr " :8899 "
+```
+
+You must see `0.0.0.0:8080`, `0.0.0.0:5003`, `0.0.0.0:8899` as **LISTENING**.
+If you see `127.0.0.1:8080` only, Docker is binding to localhost — restart the Docker containers.
+
+---
+
+### Step 5 — Start the Health Agent on Windows
+
+The health agent is **not auto-started** — it must be launched manually after each reboot.
+
+Script location: `D:\compute_node_health_agent.py`
+
+**Visible (to confirm it works):**
+```powershell
+python "D:\compute_node_health_agent.py"
+```
+
+Expected startup output:
+```
+Collecting initial metrics...
+Metrics refreshing every 8s in background.
+Compute health agent listening on http://0.0.0.0:8899/health
+```
+
+**Hidden (background, survives closing PowerShell):**
+```powershell
+Start-Process python -ArgumentList '"D:\compute_node_health_agent.py"' -WindowStyle Hidden
+```
+
+---
+
+### Step 6 — Verify from the Mac
+
+Run these three checks from the Mac terminal:
+
+```bash
+# Airflow — should return JSON with "metadatabase": {"status": "healthy"}
+curl -s -u airflow:airflow http://100.88.150.103:8080/health
+
+# MLflow — should return: OK
+curl -s http://100.88.150.103:5003/health
+
+# Health Agent — should return JSON with "status": "ok" and GPU details
+curl -s http://100.88.150.103:8899/health
+```
+
+---
+
+### Quick Diagnosis Table
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `curl` times out on all three ports | Tailscale relay stopped | Step 2: restart Tailscale on Windows |
+| `tailscale status` shows Windows as offline | Tailscale not running on Windows | Open Tailscale app on Windows |
+| Port reachable but service returns error | Docker container down | Restart containers on Windows |
+| Port 8899 connection refused | Health agent not running | Step 5: start health agent |
+| Port shows `127.0.0.1` in netstat, not `0.0.0.0` | Docker bound to localhost | Restart Docker containers on Windows |
+| Firewall rules missing after Windows update | Rules may be reset | Step 3: re-add firewall rules |
+
+---
+
 ## Key Bugs Fixed
 
 | Bug | Root cause | Fix |

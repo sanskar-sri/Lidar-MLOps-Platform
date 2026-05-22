@@ -4312,6 +4312,254 @@ pre {
     margin: 4px 0 14px;
 }
 
+/* ── Airflow DAG Monitor panel (Execute tab) ──────────────────────── */
+.preproc-monitor-panel {
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-top: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.preproc-monitor-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    background: var(--app-accent);
+    opacity: 0.8;
+}
+
+.preproc-monitor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.preproc-monitor-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.preproc-monitor-title {
+    color: var(--app-text);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.preproc-monitor-counts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.preproc-monitor-count-cell {
+    background: var(--app-surface-2);
+    border: 1px solid var(--app-border-soft);
+    border-radius: 6px;
+    padding: 10px 12px;
+    text-align: center;
+}
+
+.preproc-monitor-count {
+    display: block;
+    font-size: 22px;
+    font-weight: 780;
+    line-height: 1.15;
+    font-family: "Space Mono", monospace;
+}
+
+.preproc-monitor-count-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--app-muted);
+    margin-top: 3px;
+}
+
+.preproc-monitor-count-done { color: var(--app-success); }
+.preproc-monitor-count-run  { color: var(--app-accent); }
+.preproc-monitor-count-pend { color: var(--app-muted); }
+.preproc-monitor-count-fail { color: var(--app-danger); }
+
+.preproc-monitor-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.preproc-monitor-dag-name {
+    font-size: 11px;
+    color: var(--app-muted);
+    font-family: "Space Mono", monospace;
+    letter-spacing: 0.02em;
+}
+
+.preproc-monitor-fields-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.preproc-monitor-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.preproc-monitor-field-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--app-muted);
+    white-space: nowrap;
+}
+
+.preproc-monitor-field-value {
+    font-size: 12px;
+    color: var(--app-text);
+    font-family: "Space Mono", monospace;
+}
+
+.preproc-monitor-field-idle {
+    color: var(--app-muted);
+}
+
+.preproc-monitor-progress {
+    height: 8px;
+    border-radius: 999px;
+}
+
+.preproc-monitor-hint {
+    font-size: 11px;
+    color: var(--app-muted);
+    font-family: "Space Mono", monospace;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+/* ── Sidebar compact DAG status ───────────────────────────────────── */
+.preproc-sidebar-dag-status-card {
+    background: var(--app-surface-2);
+    border: 1px solid var(--app-border-soft);
+    border-radius: 7px;
+    padding: 10px 12px;
+}
+
+.preproc-sidebar-dag-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.preproc-sidebar-dag-link {
+    color: var(--app-accent);
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.preproc-sidebar-dag-link:hover {
+    color: #7fd4ff;
+    text-decoration: underline;
+}
+
+.preproc-sidebar-progress {
+    height: 6px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+}
+
+.preproc-sidebar-dag-run-id {
+    color: var(--app-muted);
+    font-size: 10px;
+    font-family: "Space Mono", monospace;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+}
+
+/* ── Dataset tab: config sub-cards ───────────────────────────────── */
+.preproc-config-subcard {
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+}
+
+.preproc-config-subcard::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 2px;
+    background: var(--app-border);
+    opacity: 0.6;
+}
+
+.preproc-exec-subcard::before {
+    background: var(--app-success);
+    opacity: 0.7;
+}
+
+.preproc-subcard-label {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--app-muted);
+    margin-bottom: 14px;
+}
+
+/* ── Execution controls row ──────────────────────────────────────── */
+.preproc-exec-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.preproc-exec-btn {
+    white-space: nowrap;
+}
+
+/* ── Execute tab: redirect note ──────────────────────────────────── */
+.preproc-exec-redirect-note {
+    background: var(--app-surface-2);
+    border: 1px solid var(--app-border-soft);
+    border-left: 3px solid var(--app-accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+    font-size: 12px;
+}
+
+.preproc-exec-redirect-text {
+    color: var(--app-muted);
+}
+
+.preproc-exec-redirect-strong {
+    color: var(--app-accent);
+    font-weight: 700;
+}
+
 .prep-node-dot-connected {
     animation: controlPulseGreen 1.8s ease-in-out infinite;
 }
@@ -4980,6 +5228,550 @@ pre {
     line-height: 1.3;
 }
 
+.preproc-workflow-stage-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+.preproc-workflow-stage {
+    position: relative;
+    overflow: hidden;
+    background: rgba(7, 9, 15, 0.58);
+    border: 1px solid rgba(79, 179, 255, 0.12);
+    border-radius: 8px;
+    padding: 18px;
+}
+
+.preproc-workflow-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--de-cyan), var(--de-green));
+    opacity: 0.78;
+}
+
+.preproc-stage-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.preproc-stage-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    flex: 0 0 34px;
+    color: #05070d;
+    background: var(--de-cyan);
+    font-family: "Space Mono", monospace;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.preproc-stage-title {
+    min-width: 0;
+}
+
+.data-explorer-page .preproc-workflow-stage .preproc-stage-title h4 {
+    color: var(--de-text) !important;
+    font-size: 15px;
+    font-weight: 750;
+    letter-spacing: 0;
+    line-height: 1.2;
+    margin: 0 0 4px;
+    opacity: 1;
+    text-transform: none;
+}
+
+.preproc-stage-output {
+    color: var(--de-green);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.preproc-stage-facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.preproc-stage-fact {
+    background: rgba(79, 179, 255, 0.035);
+    border: 1px solid rgba(79, 179, 255, 0.10);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.preproc-stage-fact-label,
+.preproc-stage-meta-title {
+    display: block;
+    color: var(--de-cyan);
+    font-family: "Space Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    line-height: 1.2;
+    margin-bottom: 7px;
+    text-transform: uppercase;
+}
+
+.preproc-stage-fact-value {
+    display: block;
+    color: var(--de-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.preproc-stage-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.preproc-stage-meta {
+    min-width: 0;
+}
+
+.preproc-workflow-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.preproc-workflow-chip {
+    max-width: 100%;
+    border: 1px solid rgba(79, 179, 255, 0.14);
+    border-radius: 999px;
+    color: var(--de-text);
+    background: rgba(79, 179, 255, 0.045);
+    font-family: "Space Mono", monospace;
+    font-size: 10px;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+    padding: 6px 8px;
+}
+
+.preproc-stage-controls {
+    border-top: 1px solid rgba(79, 179, 255, 0.10);
+    margin-top: 16px;
+    padding-top: 16px;
+}
+
+.preproc-stage-controls .ops-field-grid {
+    margin: 0;
+}
+
+/* ── Parameters tab — visual polish ────────────────────────────────────── */
+/*
+ * Color hierarchy (dark → light):
+ *   page bg      ≈ #07090f  (near-black)
+ *   overview card  #162035  (dark slate-blue)
+ *   stage card     #1c2d44  (mid slate-blue — clearly visible against page bg)
+ *   fact cards     #243654  (lighter — nested contrast inside stage card)
+ *   chips          #1a2d45  (badge-dark with light text)
+ */
+
+/* ── Main stage cards ── */
+.preproc-workflow-stage {
+    position: relative;
+    overflow: hidden;
+    background: #1c2d44;
+    border: 1px solid #2d4260;
+    border-left: 4px solid #38bdf8;
+    border-radius: 14px;
+    padding: 20px 22px 18px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+}
+
+/* suppress old gradient bar — border-left replaces it */
+.preproc-workflow-stage::before {
+    display: none;
+}
+
+/* ── Stage number badge ── */
+.preproc-stage-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    flex: 0 0 34px;
+    color: #05070d;
+    background: #38bdf8;
+    font-family: "Space Mono", monospace;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+/* ── Stage title ── */
+.data-explorer-page .preproc-workflow-stage .preproc-stage-title h4 {
+    color: #f8fafc !important;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    line-height: 1.25;
+    margin: 0 0 4px;
+    opacity: 1;
+    text-transform: none;
+}
+
+/* ── Stage output / subtitle ── */
+.preproc-stage-output {
+    color: #34d399;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* ── What / Why / How fact cards ── */
+.preproc-stage-fact {
+    background: #243654;
+    border: 1px solid #2e4a6e;
+    border-radius: 10px;
+    padding: 13px 14px;
+}
+
+.preproc-stage-fact-label,
+.preproc-stage-meta-title {
+    display: block;
+    color: #38bdf8;
+    font-family: "Space Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    line-height: 1.2;
+    margin-bottom: 7px;
+    text-transform: uppercase;
+    opacity: 1;
+}
+
+.preproc-stage-fact-value {
+    display: block;
+    color: #cbd5e1;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* ── Meta grid (Parameters Consumed / Tech sections) ── */
+.preproc-stage-meta {
+    background: #1c2d44;
+    border: 1px solid #2d4260;
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+/* ── Parameter / tech chips ── */
+.preproc-workflow-chip {
+    max-width: 100%;
+    background: #162135;
+    border: 1px solid #2d4260;
+    border-radius: 999px;
+    color: #e2e8f0;
+    font-family: "Space Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+    padding: 5px 10px;
+}
+
+/* ── Flow overview list (right column) ── */
+.preproc-flow-label {
+    color: #cbd5e1;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+}
+
+.preproc-flow-index {
+    color: #34d399;
+    font-family: "Space Mono", monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+}
+
+/* ── Flow step connector dots ── */
+.preproc-flow-step::before {
+    background: #38bdf8;
+    box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.12);
+}
+
+/* ── Workflow overview card (top card with step list) ── */
+.ops-review-card.preproc-workflow-card {
+    background: #162035;
+    border: 1px solid #243a56;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+.data-explorer-page .ops-review-card.preproc-workflow-card .preproc-workflow-copy h3 {
+    color: #f8fafc !important;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0;
+    margin: 0 0 10px;
+    opacity: 1;
+    text-transform: none;
+}
+
+.preproc-workflow-copy p {
+    color: #94a3b8;
+    font-size: 13px;
+    line-height: 1.7;
+    margin: 0 0 12px;
+}
+
+/* ── Model tags ── */
+.preproc-workflow-models span {
+    background: #1c2d44;
+    border: 1px solid #2d4260;
+    color: #e2e8f0;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 6px 11px;
+}
+
+/* ── Stage list gap ── */
+.preproc-workflow-stage-list {
+    gap: 18px;
+}
+
+/* ── Controls area separator ── */
+.preproc-stage-controls {
+    border-top: 1px solid #2d4260;
+    margin-top: 16px;
+    padding-top: 16px;
+}
+
+/* ── Execute tab — new layout styles ────────────────────────────────────── */
+
+/* Execution plan 3-column banner */
+.preproc-exec-banner {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr 1px 1fr;
+    background: rgba(7, 11, 18, 0.58);
+    border: 1px solid rgba(125, 180, 255, 0.14);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.preproc-exec-col {
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+    padding: 18px 16px;
+}
+
+.preproc-exec-divider {
+    background: rgba(125, 180, 255, 0.09);
+    width: 1px;
+}
+
+.preproc-exec-num {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--de-cyan);
+    color: #05070d;
+    border-radius: 7px;
+    font-family: "Space Mono", monospace;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.preproc-exec-col-head {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--de-text, #edf2f7);
+    margin-bottom: 5px;
+    line-height: 1.2;
+}
+
+.preproc-exec-col-text {
+    font-size: 12px;
+    color: #8d9eb4;
+    line-height: 1.6;
+}
+
+/* MLflow workstation card */
+.preproc-mlflow-card {
+    background: rgba(79, 179, 255, 0.04);
+    border: 1px solid rgba(79, 179, 255, 0.18);
+    border-radius: 10px;
+    padding: 18px 20px 16px;
+    margin-bottom: 6px;
+}
+
+.preproc-mlflow-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.preproc-mlflow-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 9px;
+    background: rgba(79, 179, 255, 0.12);
+    border: 1px solid rgba(79, 179, 255, 0.26);
+    border-radius: 999px;
+    color: var(--de-cyan);
+    font-family: "Space Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.preproc-mlflow-host {
+    color: #7db8ff;
+    font-family: "Space Mono", monospace;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.preproc-mlflow-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 0;
+}
+
+.preproc-mlflow-uri-col {
+    min-width: 0;
+}
+
+.preproc-mlflow-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding-top: 26px;
+}
+
+.preproc-mlflow-exp-link {
+    display: block;
+    text-align: center;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--de-cyan);
+    background: rgba(79, 179, 255, 0.07);
+    border: 1px solid rgba(79, 179, 255, 0.20);
+    border-radius: 7px;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.preproc-mlflow-exp-link:hover {
+    background: rgba(79, 179, 255, 0.13);
+    border-color: rgba(79, 179, 255, 0.32);
+    color: var(--de-cyan);
+    text-decoration: none;
+}
+
+.preproc-mlflow-arrow {
+    opacity: 0.7;
+}
+
+.preproc-mlflow-fields {
+    margin-top: 16px;
+}
+
+/* Execution checklist card */
+.preproc-exec-checklist-card {
+    background: rgba(7, 11, 18, 0.55);
+    border: 1px solid rgba(125, 180, 255, 0.12);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-top: 18px;
+}
+
+.preproc-exec-checklist-head {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--de-text, #edf2f7);
+    margin-bottom: 12px;
+    letter-spacing: 0.01em;
+}
+
+.preproc-exec-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.preproc-exec-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(125, 180, 255, 0.06);
+}
+
+.preproc-exec-step:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.preproc-exec-step-num {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(85, 226, 167, 0.10);
+    border: 1px solid rgba(85, 226, 167, 0.22);
+    border-radius: 50%;
+    color: var(--de-green, #55e2a7);
+    font-family: "Space Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.preproc-exec-step-text {
+    font-size: 12.5px;
+    color: #9aadbe;
+    line-height: 1.55;
+    padding-top: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+    .preproc-exec-banner {
+        grid-template-columns: 1fr;
+    }
+    .preproc-exec-divider {
+        display: none;
+    }
+    .preproc-mlflow-row {
+        grid-template-columns: 1fr;
+    }
+    .preproc-mlflow-btns {
+        flex-direction: row;
+        padding-top: 0;
+    }
+}
+
 /* ── Gold layer metrics ─────────────────────────────────────────────────── */
 
 .gold-split-grid {
@@ -5421,6 +6213,11 @@ pre {
 
 @media (max-width: 900px) {
     .preproc-workflow-card {
+        grid-template-columns: 1fr;
+    }
+
+    .preproc-stage-facts,
+    .preproc-stage-meta-grid {
         grid-template-columns: 1fr;
     }
 

@@ -559,94 +559,195 @@ def _preproc_sidebar():
                 style={"fontSize": "11px"},
             ),
             html.Div(id="registry-action-message", className="mt-2"),
+            html.Div(id="preproc-sidebar-dag-status", className="mt-2"),
         ],
     )
 
 
 def _tab_dataset():
+    _base = (AIRFLOW_BASE_URL or "http://100.88.150.103:8080").rstrip("/")
+    _dag = AIRFLOW_PREPROCESSING_DAG_ID or AIRFLOW_DAG_ID or "lidar_preprocessing_pipeline"
+    _airflow_url = f"{_base}/dags/{_dag}/grid"
+    _mlflow_url = mlflow_browser_url(DEFAULT_MLFLOW_TRACKING_URI)
+
     return html.Div(
         [
+            # ── Tab header ────────────────────────────────────────────────
             html.Div(
                 [
                     html.Div("Step 01", className="data-explorer-eyebrow"),
-                    html.H3("Dataset and Label Configuration"),
+                    html.H3("Dataset Execution & Airflow Monitoring"),
                     html.P(
-                        "Configure label field mappings, binary class IDs, "
-                        "spatial split routing, and B2 output path for this run."
+                        "Configure label field mappings and B2 output path, "
+                        "trigger the remote preprocessing DAG, and monitor live run status — all in one place."
                     ),
                 ],
                 className="preproc-tab-head",
             ),
+
+            # ── Label configuration sub-card ──────────────────────────────
             html.Div(
                 [
-                    _field("Label Field", dbc.Input(id="preproc-label-field", value="class", placeholder="class or scalar_Label", persistence=True, persistence_type="session")),
-                    _field("Building Labels", dbc.Input(id="preproc-building-labels", value="2", placeholder="e.g. 2 or 4", persistence=True, persistence_type="session")),
-                    _field("Non-Building Labels", dbc.Input(id="preproc-non-building-labels", value="1, 3, 4, 5, 6, 7, 8, 9", placeholder="Comma-separated raw class IDs", persistence=True, persistence_type="session"), wide=True),
-                    _field("Ignore Labels", dbc.Input(id="preproc-ignore-labels", value="0", placeholder="Comma-separated raw class IDs", persistence=True, persistence_type="session")),
-                    _field("Mode", dcc.Dropdown(
-                        id="preproc-mode",
-                        options=[
-                            {"label": "Training — labels required", "value": "train"},
-                            {"label": "Inference — labels optional", "value": "inference"},
+                    html.Div("Label Configuration", className="preproc-subcard-label"),
+                    html.Div(
+                        [
+                            _field("Label Field", dbc.Input(id="preproc-label-field", value="class", placeholder="class or scalar_Label", persistence=True, persistence_type="session")),
+                            _field("Building Labels", dbc.Input(id="preproc-building-labels", value="2", placeholder="e.g. 2 or 4", persistence=True, persistence_type="session")),
+                            _field("Non-Building Labels", dbc.Input(id="preproc-non-building-labels", value="1, 3, 4, 5, 6, 7, 8, 9", placeholder="Comma-separated raw class IDs", persistence=True, persistence_type="session"), wide=True),
+                            _field("Ignore Labels", dbc.Input(id="preproc-ignore-labels", value="0", placeholder="Comma-separated raw class IDs", persistence=True, persistence_type="session")),
+                            _field("Mode", dcc.Dropdown(
+                                id="preproc-mode",
+                                options=[
+                                    {"label": "Training — labels required", "value": "train"},
+                                    {"label": "Inference — labels optional", "value": "inference"},
+                                ],
+                                value="train",
+                                clearable=False,
+                            )),
+                            _field("B2 Silver Output Prefix", dbc.Input(id="preproc-b2-output-prefix", placeholder="silver_preprocessed_data/<dataset>/<prep_version>", persistence=True, persistence_type="session"), wide=True),
                         ],
-                        value="train",
-                        clearable=False,
-                    )),
-                    _field("B2 Silver Output Prefix", dbc.Input(id="preproc-b2-output-prefix", placeholder="silver_preprocessed_data/<dataset>/<prep_version>", persistence=True, persistence_type="session"), wide=True),
+                        className="ops-field-grid",
+                    ),
                 ],
-                className="ops-field-grid",
+                className="preproc-config-subcard",
             ),
-            html.Hr(className="preproc-tab-divider"),
-            _section_label("Segment Split"),
-            html.P("Train + val + test must equal total segments.", className="ops-muted-copy"),
+
+            # ── Execution controls sub-card ───────────────────────────────
             html.Div(
                 [
-                    _field("Total", dbc.Input(id="preproc-num-segments", type="number", value=DEFAULT_NUM_SEGMENTS, min=1, step=1)),
-                    _field("Train", dbc.Input(id="preproc-train-segments", type="number", value=DEFAULT_TRAIN_SEGMENTS, min=0, step=1)),
-                    _field("Val", dbc.Input(id="preproc-val-segments", type="number", value=DEFAULT_VAL_SEGMENTS, min=0, step=1)),
-                    _field("Test", dbc.Input(id="preproc-test-segments", type="number", value=DEFAULT_TEST_SEGMENTS, min=0, step=1)),
-                    html.Div(id="preproc-segment-validation", className="ops-validation-badge"),
+                    html.Div("Execution Controls", className="preproc-subcard-label"),
+                    html.Div(
+                        [
+                            dbc.Button(
+                                "Start Preprocessing",
+                                id="preproc-trigger-airflow-button",
+                                color="success",
+                                className="preproc-exec-btn",
+                            ),
+                            html.A(
+                                dbc.Button("Open Airflow DAG", color="info", outline=True, className="preproc-exec-btn"),
+                                href=_airflow_url,
+                                target="_blank",
+                                rel="noopener noreferrer",
+                            ),
+                            html.A(
+                                dbc.Button("Open MLflow", color="secondary", outline=True, className="preproc-exec-btn"),
+                                href=_mlflow_url if _mlflow_url != "#" else f"http://100.88.150.103:5003",
+                                target="_blank",
+                                rel="noopener noreferrer",
+                            ),
+                        ],
+                        className="preproc-exec-controls-row",
+                    ),
+                    html.Div(id="preproc-action-message", className="mt-3"),
                 ],
-                className="ops-field-grid ops-segment-grid",
+                className="preproc-config-subcard preproc-exec-subcard",
             ),
+
+            # ── Live Airflow run monitor ───────────────────────────────────
+            html.Div(id="preproc-dataset-airflow-monitor", className="mt-2"),
         ],
         className="preproc-tab-body",
     )
 
 
-def _preprocessing_workflow_card():
+def _workflow_chip_list(items):
+    return html.Div(
+        [html.Span(str(item), className="preproc-workflow-chip") for item in items if item],
+        className="preproc-workflow-chip-list",
+    )
+
+
+def _workflow_fact(label, value):
+    return html.Div(
+        [
+            html.Span(label, className="preproc-stage-fact-label"),
+            html.Span(value, className="preproc-stage-fact-value"),
+        ],
+        className="preproc-stage-fact",
+    )
+
+
+def _workflow_stage(number, title, does, why, how, parameters, tech, output, controls=None):
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span(f"{number:02d}", className="preproc-stage-number"),
+                    html.Div(
+                        [
+                            html.H4(title),
+                            html.Div(output, className="preproc-stage-output"),
+                        ],
+                        className="preproc-stage-title",
+                    ),
+                ],
+                className="preproc-stage-head",
+            ),
+            html.Div(
+                [
+                    _workflow_fact("What", does),
+                    _workflow_fact("Why", why),
+                    _workflow_fact("How", how),
+                ],
+                className="preproc-stage-facts",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Div("Parameters Consumed", className="preproc-stage-meta-title"),
+                            _workflow_chip_list(parameters),
+                        ],
+                        className="preproc-stage-meta",
+                    ),
+                    html.Div(
+                        [
+                            html.Div("Tech / Services", className="preproc-stage-meta-title"),
+                            _workflow_chip_list(tech),
+                        ],
+                        className="preproc-stage-meta",
+                    ),
+                ],
+                className="preproc-stage-meta-grid",
+            ),
+            html.Div(controls, className="preproc-stage-controls") if controls else None,
+        ],
+        className="preproc-workflow-stage",
+    )
+
+
+def _preprocessing_flow_overview():
     workflow_steps = [
-        "Raw Point Cloud Data",
-        "Read PLY / LAS / LAZ Files",
-        "Extract XYZ Coordinates and Point Attributes",
-        "Validate Required Fields",
-        "Apply Dataset-Specific Label Mapping",
-        "Generate Binary Labels: Building / Non-Building",
-        "Split Large Scenes into Spatial Blocks",
-        "Normalize Coordinates within Each Block",
-        "Sample Fixed Number of Points per Block",
-        "Save Model-Ready Training Data",
-        "Use for Model Training / Validation / Testing",
+        "Dataset Selection",
+        "Raw File Discovery",
+        "Point Cloud Reading",
+        "Attribute Extraction",
+        "Label Mapping",
+        "Data Validation",
+        "Spatial Block Generation",
+        "Coordinate Normalization",
+        "Fixed-Point Sampling",
+        "Train / Validation / Test Split",
+        "Model-Ready Output Generation",
+        "Metadata, Logs, and Registry Update",
     ]
 
     return html.Div(
         [
             html.Div(
                 [
-                    html.Div("Workflow Reference", className="data-explorer-eyebrow"),
-                    html.H3("Preprocessing Workflow"),
+                    html.Div("Step 02", className="data-explorer-eyebrow"),
+                    html.H3("Preprocessing Parameters & Workflow"),
                     html.P(
-                        "The preprocessing workflow transforms raw LiDAR point cloud files into a "
-                        "structured and consistent format that deep learning models can consume directly. "
-                        "Raw point clouds are usually large, irregular, and dataset-specific, so the "
-                        "pipeline standardizes geometry, attributes, labels, and block size before training."
+                        "This section explains how raw LiDAR point cloud data is transformed into "
+                        "model-ready data for deep learning-based building segmentation. Each stage is "
+                        "connected with the parameters it consumes, the technical logic it performs, and "
+                        "the output it produces."
                     ),
                     html.P(
-                        "The script reads PLY, LAS, or LAZ files, extracts coordinates and attributes such "
-                        "as RGB, intensity, classification, or semantic labels, validates required fields, "
-                        "maps dataset labels into building and non-building classes, divides large scenes "
-                        "into spatial blocks, normalizes coordinates, samples a fixed number of points, and "
-                        "saves model-ready data for training, validation, and testing."
+                        "Use this tab to understand the value of each parameter before running "
+                        "preprocessing, then review the generated Silver and Gold outputs in the later tabs."
                     ),
                     html.Div(
                         [
@@ -683,201 +784,415 @@ def _preprocessing_workflow_card():
 def _tab_parameters():
     return html.Div(
         [
+            _preprocessing_flow_overview(),
             html.Div(
                 [
-                    html.Div("Step 02", className="data-explorer-eyebrow"),
-                    html.H3("Pipeline Parameters"),
-                    html.P(
-                        "Every value below is injected directly into the Airflow DAG conf — "
-                        "no hidden defaults are applied by Dash."
+                    _workflow_stage(
+                        1,
+                        "Dataset Selection",
+                        "Selects the registered dataset that will be preprocessed.",
+                        "The pipeline needs a dataset identity before it can resolve raw files, labels, storage paths, and output prefixes.",
+                        "Dash keeps the selected dataset context from the sidebar and Dataset tab, then builds the Airflow configuration around that dataset.",
+                        ["dataset_id", "dataset_name", "source_path", "storage_layer"],
+                        ["Dash UI", "Dataset Registry", "metadata_service.py", "B2 / local path resolver"],
+                        "Selected dataset context for preprocessing",
+                    ),
+                    _workflow_stage(
+                        2,
+                        "Raw File Discovery",
+                        "Finds all available raw point cloud files for the selected dataset.",
+                        "The preprocessing script must know which PLY, LAS, or LAZ files should be processed.",
+                        "The raw source prefix is scanned for supported point cloud files, usually under the Bronze layer.",
+                        ["input_format", "source_files_path", "allowed_extensions", "recursive_scan"],
+                        ["Python pathlib / os", "b2_service.py", "browser_upload_service.py", "Backblaze B2 S3 API"],
+                        "List of raw PLY / LAS / LAZ files",
+                    ),
+                    _workflow_stage(
+                        3,
+                        "Point Cloud Reading",
+                        "Reads raw point cloud files into arrays that preprocessing logic can transform.",
+                        "Deep learning models cannot consume raw LiDAR files directly; coordinates, attributes, and labels must be parsed first.",
+                        "PLY, LAS, or LAZ readers load point-level values into NumPy-compatible arrays.",
+                        ["file_path", "input_format", "read_mode", "max_points", "subsample_ratio"],
+                        ["preprocess_mls_v9_compat.py", "pointcloud_reader.py", "plyfile", "laspy", "NumPy"],
+                        "Raw point arrays containing XYZ and available attributes",
+                    ),
+                    _workflow_stage(
+                        4,
+                        "Attribute Extraction",
+                        "Extracts usable point-level features such as XYZ, RGB, intensity, classification, and semantic labels.",
+                        "Point cloud models need a consistent feature schema so every block has the same input meaning.",
+                        "Available fields are checked against the requested feature configuration before the feature matrix is assembled.",
+                        ["use_xyz", "use_rgb", "use_intensity", "use_classification", "use_semantic_label", "feature_columns"],
+                        ["NumPy", "Pandas", "pointcloud_reader.py", "metadata_service.py"],
+                        "Feature matrix containing selected point attributes",
+                        controls=html.Div(
+                            [
+                                _field("Input Features", dbc.Checklist(
+                                    id="preproc-input-features",
+                                    options=[
+                                        {"label": "XYZ", "value": "xyz"},
+                                        {"label": "Intensity", "value": "intensity"},
+                                        {"label": "RGB", "value": "rgb"},
+                                        {"label": "Labels", "value": "labels"},
+                                    ],
+                                    value=["xyz", "intensity", "rgb", "labels"],
+                                    inline=True,
+                                    switch=True,
+                                ), wide=True),
+                                _field("Generated Features", dbc.Checklist(
+                                    id="preproc-feature-flags",
+                                    options=[
+                                        {"label": "Compute normals", "value": "compute_normals"},
+                                        {"label": "Include density", "value": "include_density"},
+                                        {"label": "Write silver tier", "value": "write_silver"},
+                                        {"label": "Save PLY previews", "value": "save_ply"},
+                                        {"label": "Compress output", "value": "compress_output"},
+                                    ],
+                                    value=["compute_normals", "include_density", "write_silver", "save_ply"],
+                                    inline=True,
+                                    switch=True,
+                                ), wide=True),
+                            ],
+                            className="ops-field-grid",
+                        ),
+                    ),
+                    _workflow_stage(
+                        5,
+                        "Label Mapping",
+                        "Converts dataset-specific labels into the binary building segmentation target.",
+                        "Different datasets use different class IDs, so training needs one common building / non-building label structure.",
+                        "The configured label map converts raw labels into 0 for non-building and 1 for building.",
+                        ["label_column", "building_label_ids", "non_building_label_ids", "label_mapping_file", "target_classes"],
+                        ["Python dictionary mapping", "JSON / YAML label maps", "metadata_service.py", "NumPy"],
+                        "Binary labels: 0 = non-building, 1 = building",
+                        controls=html.Div(
+                            [
+                                _field("Label Mapping Mode", dcc.Dropdown(
+                                    id="preproc-label-mode",
+                                    options=[
+                                        {"label": "Registry or raw numeric IDs", "value": "registry_or_raw_ids"},
+                                        {"label": "Raw numeric IDs only", "value": "raw_numeric_ids"},
+                                        {"label": "External XML/JSON map required", "value": "mapping_file_required"},
+                                    ],
+                                    value="registry_or_raw_ids",
+                                    clearable=False,
+                                )),
+                            ],
+                            className="ops-field-grid",
+                        ),
+                    ),
+                    _workflow_stage(
+                        6,
+                        "Data Validation",
+                        "Checks whether the extracted point cloud data is complete and usable.",
+                        "Missing labels, invalid coordinates, empty files, or too few points can cause preprocessing failure or weak training data.",
+                        "The pipeline verifies required fields, filters invalid points, and rejects blocks that do not meet quality thresholds.",
+                        ["required_columns", "min_points_per_file", "remove_nan", "remove_invalid_labels", "validate_coordinates", "min_bldg_ratio"],
+                        ["NumPy", "Pandas", "metadata_service.py", "logging"],
+                        "Validated and cleaned point cloud data",
+                        controls=html.Div(
+                            [
+                                _field("Min Building Ratio", dbc.Input(id="preproc-min-bldg", type="number", value=0.01, step=0.005)),
+                                _field("Workers", dbc.Input(id="preproc-workers", type="number", min=1, max=64, value=24)),
+                            ],
+                            className="ops-field-grid",
+                        ),
+                    ),
+                    _workflow_stage(
+                        7,
+                        "Spatial Block Generation",
+                        "Divides large point cloud scenes into smaller spatial blocks.",
+                        "Large LiDAR scenes are too big for direct model input, so blocks create manageable training samples.",
+                        "The script uses spatial coordinates, block size, stride, and overlap settings to build local point regions.",
+                        ["block_size", "stride", "min_points_per_block", "max_blocks", "overlap_ratio"],
+                        ["NumPy", "SciPy / KDTree", "custom block generation", "tqdm"],
+                        "Spatial point blocks suitable for training",
+                        controls=html.Div(
+                            [
+                                _field("Block Size (m)", dbc.Input(id="preproc-block-size", type="number", value=2.0, step=0.5)),
+                                _field("Max Train Blocks", dbc.Input(id="preproc-max-blocks", type="number", value=8000, step=500)),
+                                _field("Val / Test Stride", dbc.Input(id="preproc-stride", type="number", value=1.5, step=0.25)),
+                                _field("RandLA Overlap", dbc.Input(id="preproc-randla-overlap", type="number", value=0.0, step=0.05, min=0, max=0.95)),
+                                _field("PTv3 Scene Length", dbc.Input(id="preproc-ptv3-length", type="number", value=50.0, step=5)),
+                            ],
+                            className="ops-field-grid ops-field-grid-four",
+                        ),
+                    ),
+                    _workflow_stage(
+                        8,
+                        "Coordinate Normalization",
+                        "Normalizes XYZ coordinates into a stable local reference frame.",
+                        "Normalization helps models learn local geometry instead of absolute map positions or large UTM coordinate values.",
+                        "Coordinates are offset or centered before being saved into block-level feature arrays.",
+                        ["normalize_xyz", "normalization_method", "center_coordinates", "scale_coordinates", "use_local_coordinates"],
+                        ["NumPy", "custom preprocessing utilities"],
+                        "Normalized block-level coordinates",
+                        controls=html.Div(
+                            [
+                                _field("Coordinate Normalization", dcc.Dropdown(
+                                    id="preproc-coordinate-normalization",
+                                    options=[
+                                        {"label": "Subtract coordinate offset", "value": "offset_subtract"},
+                                        {"label": "Keep original coordinates", "value": "none"},
+                                    ],
+                                    value="offset_subtract",
+                                    clearable=False,
+                                )),
+                                _field("Voxel Size (m)", dbc.Input(id="preproc-voxel-size", type="number", value=0.02, step=0.01, min=0)),
+                                _field("Voxel Keep Strategy", dcc.Dropdown(
+                                    id="preproc-voxel-strategy",
+                                    options=[
+                                        {"label": "Representative point", "value": "representative"},
+                                        {"label": "Centroid mean", "value": "centroid"},
+                                    ],
+                                    value="representative",
+                                    clearable=False,
+                                )),
+                            ],
+                            className="ops-field-grid",
+                        ),
+                    ),
+                    _workflow_stage(
+                        9,
+                        "Fixed-Point Sampling",
+                        "Samples a fixed number of points from every spatial block.",
+                        "Most point cloud models require each input sample to contain a consistent number of points.",
+                        "Blocks with too many points are sampled down; blocks with too few points can be padded by replacement.",
+                        ["n_points", "sampling_method", "random_seed", "allow_replacement", "padding_strategy"],
+                        ["NumPy random sampling", "PyTorch-compatible tensor preparation"],
+                        "Fixed-size point blocks such as 4096 or 8192 points per block",
+                        controls=html.Div(
+                            [
+                                _field("Points / Block", dbc.Input(id="preproc-n-points", type="number", value=8192, step=1024)),
+                            ],
+                            className="ops-field-grid",
+                        ),
+                    ),
+                    _workflow_stage(
+                        10,
+                        "Train / Validation / Test Split",
+                        "Divides processed blocks into training, validation, and testing subsets.",
+                        "Clear splits are required for model fitting, parameter tuning, and generalization evaluation.",
+                        "The pipeline assigns data using the selected split strategy, segment counts, and gap buffer.",
+                        ["train_ratio", "val_ratio", "test_ratio", "split_strategy", "random_seed", "site_wise_split"],
+                        ["NumPy", "custom split utilities", "Airflow payload config"],
+                        "train / val / test subsets",
+                        controls=html.Div(
+                            [
+                                _field("Split Strategy", dcc.Dropdown(
+                                    id="preproc-split-strategy",
+                                    options=[
+                                        {"label": "Spatial segment split", "value": "segment_spatial"},
+                                        {"label": "Tile-level split", "value": "tile_split"},
+                                        {"label": "Existing split metadata", "value": "existing_split_metadata"},
+                                    ],
+                                    value="segment_spatial",
+                                    clearable=False,
+                                )),
+                                _field("Split Gap (m)", dbc.Input(id="preproc-split-gap", type="number", value=2.0, step=0.5)),
+                                _field("Total Segments", dbc.Input(id="preproc-num-segments", type="number", value=DEFAULT_NUM_SEGMENTS, min=1, step=1)),
+                                _field("Train Segments", dbc.Input(id="preproc-train-segments", type="number", value=DEFAULT_TRAIN_SEGMENTS, min=0, step=1)),
+                                _field("Val Segments", dbc.Input(id="preproc-val-segments", type="number", value=DEFAULT_VAL_SEGMENTS, min=0, step=1)),
+                                _field("Test Segments", dbc.Input(id="preproc-test-segments", type="number", value=DEFAULT_TEST_SEGMENTS, min=0, step=1)),
+                                html.Div(id="preproc-segment-validation", className="ops-validation-badge"),
+                            ],
+                            className="ops-field-grid ops-segment-grid",
+                        ),
+                    ),
+                    _workflow_stage(
+                        11,
+                        "Model-Ready Output Generation",
+                        "Saves processed data in formats that training pipelines can consume directly.",
+                        "Training requires structured files with input features, normalized coordinates, labels, and metadata.",
+                        "The run writes Silver cleaned clouds and Gold model-ready blocks or Pointcept/PTv3 scenes based on output settings.",
+                        ["output_format", "output_path", "save_compressed", "include_metadata", "feature_schema"],
+                        ["NumPy .npz", "Pointcept layout", "Parquet analytics", "metadata_service.py"],
+                        "Model-ready features, coordinates, labels, and metadata",
+                        controls=html.Div(
+                            [
+                                _field("Output Tier", dcc.Dropdown(
+                                    id="preproc-output-tier",
+                                    options=[
+                                        {"label": "Silver and Gold", "value": "silver_and_gold"},
+                                        {"label": "Silver only", "value": "silver_only"},
+                                    ],
+                                    value="silver_and_gold",
+                                    clearable=False,
+                                )),
+                                _field("Output Mode", dcc.Dropdown(
+                                    id="preproc-output-mode",
+                                    options=[
+                                        {"label": "All model formats", "value": "all"},
+                                        {"label": "Traditional blocks only", "value": "traditional"},
+                                        {"label": "PTv3 / Pointcept only", "value": "ptv3"},
+                                    ],
+                                    value="all",
+                                    clearable=False,
+                                )),
+                            ],
+                            className="ops-field-grid",
+                        ),
+                    ),
+                    _workflow_stage(
+                        12,
+                        "Metadata, Logs, and Registry Update",
+                        "Records preprocessing output details for traceability and review.",
+                        "Production datasets must be reproducible, auditable, and easy to verify from the platform UI.",
+                        "The platform stores run parameters, output paths, point counts, block counts, class distribution, logs, and lineage metadata.",
+                        ["run_id", "dataset_id", "output_path", "log_path", "metadata_path", "parameter_config"],
+                        ["metadata_service.py", "parquet_service.py", "upload_progress.py", "logging", "Backblaze B2"],
+                        "Updated metadata, logs, class summaries, and processed dataset records",
+                        controls=html.Div(
+                            [
+                                _field("Preprocessing Version", dbc.Input(id="preproc-version", value="", placeholder="auto — workstation increments from last run", persistence=True, persistence_type="session")),
+                                _field("Pipeline Version", dbc.Input(id="preproc-pipeline-version", value=DEFAULT_PIPELINE_VERSION, persistence=True, persistence_type="session")),
+                            ],
+                            className="ops-field-grid",
+                        ),
                     ),
                 ],
-                className="preproc-tab-head",
-            ),
-            _preprocessing_workflow_card(),
-            _section_label("Versioning and Output"),
-            html.Div(
-                [
-                    _field("Preprocessing Version", dbc.Input(id="preproc-version", value="", placeholder="auto — workstation increments from last run", persistence=True, persistence_type="session")),
-                    _field("Pipeline Version", dbc.Input(id="preproc-pipeline-version", value=DEFAULT_PIPELINE_VERSION, persistence=True, persistence_type="session")),
-                    _field("Output Tier", dcc.Dropdown(
-                        id="preproc-output-tier",
-                        options=[
-                            {"label": "Silver and Gold", "value": "silver_and_gold"},
-                            {"label": "Silver only", "value": "silver_only"},
-                        ],
-                        value="silver_and_gold",
-                        clearable=False,
-                    )),
-                    _field("Output Mode", dcc.Dropdown(
-                        id="preproc-output-mode",
-                        options=[
-                            {"label": "All model formats", "value": "all"},
-                            {"label": "Traditional blocks only", "value": "traditional"},
-                            {"label": "PTv3 / Pointcept only", "value": "ptv3"},
-                        ],
-                        value="all",
-                        clearable=False,
-                    )),
-                ],
-                className="ops-field-grid",
-            ),
-            _section_label("Features and Encoding"),
-            html.Div(
-                [
-                    _field("Input Features", dbc.Checklist(
-                        id="preproc-input-features",
-                        options=[
-                            {"label": "XYZ", "value": "xyz"},
-                            {"label": "Intensity", "value": "intensity"},
-                            {"label": "RGB", "value": "rgb"},
-                            {"label": "Labels", "value": "labels"},
-                        ],
-                        value=["xyz", "intensity", "rgb", "labels"],
-                        inline=True,
-                        switch=True,
-                    ), wide=True),
-                    _field("Label Mapping Mode", dcc.Dropdown(
-                        id="preproc-label-mode",
-                        options=[
-                            {"label": "Registry or raw numeric IDs", "value": "registry_or_raw_ids"},
-                            {"label": "Raw numeric IDs only", "value": "raw_numeric_ids"},
-                            {"label": "External XML/JSON map required", "value": "mapping_file_required"},
-                        ],
-                        value="registry_or_raw_ids",
-                        clearable=False,
-                    )),
-                    _field("Coordinate Normalization", dcc.Dropdown(
-                        id="preproc-coordinate-normalization",
-                        options=[
-                            {"label": "Subtract coordinate offset", "value": "offset_subtract"},
-                            {"label": "Keep original coordinates", "value": "none"},
-                        ],
-                        value="offset_subtract",
-                        clearable=False,
-                    )),
-                    _field("Split Strategy", dcc.Dropdown(
-                        id="preproc-split-strategy",
-                        options=[
-                            {"label": "Spatial segment split", "value": "segment_spatial"},
-                            {"label": "Tile-level split", "value": "tile_split"},
-                            {"label": "Existing split metadata", "value": "existing_split_metadata"},
-                        ],
-                        value="segment_spatial",
-                        clearable=False,
-                    )),
-                ],
-                className="ops-field-grid",
-            ),
-            _section_label("Voxelization and Blocking"),
-            html.Div(
-                [
-                    _field("Voxel Size (m)", dbc.Input(id="preproc-voxel-size", type="number", value=0.02, step=0.01, min=0)),
-                    _field("Voxel Keep Strategy", dcc.Dropdown(
-                        id="preproc-voxel-strategy",
-                        options=[
-                            {"label": "Representative point", "value": "representative"},
-                            {"label": "Centroid mean", "value": "centroid"},
-                        ],
-                        value="representative",
-                        clearable=False,
-                    )),
-                    _field("Block Size (m)", dbc.Input(id="preproc-block-size", type="number", value=2.0, step=0.5)),
-                    _field("Points / Block", dbc.Input(id="preproc-n-points", type="number", value=8192, step=1024)),
-                    _field("Max Train Blocks", dbc.Input(id="preproc-max-blocks", type="number", value=8000, step=500)),
-                    _field("Val / Test Stride", dbc.Input(id="preproc-stride", type="number", value=1.5, step=0.25)),
-                    _field("Split Gap (m)", dbc.Input(id="preproc-split-gap", type="number", value=2.0, step=0.5)),
-                    _field("Min Building Ratio", dbc.Input(id="preproc-min-bldg", type="number", value=0.01, step=0.005)),
-                ],
-                className="ops-field-grid ops-field-grid-four",
-            ),
-            _section_label("Model-Specific and Workers"),
-            html.Div(
-                [
-                    _field("RandLA Overlap", dbc.Input(id="preproc-randla-overlap", type="number", value=0.0, step=0.05, min=0, max=0.95)),
-                    _field("PTv3 Scene Length", dbc.Input(id="preproc-ptv3-length", type="number", value=50.0, step=5)),
-                    _field("Workers", dbc.Input(id="preproc-workers", type="number", min=1, max=64, value=24)),
-                    _field("Generated Features", dbc.Checklist(
-                        id="preproc-feature-flags",
-                        options=[
-                            {"label": "Compute normals", "value": "compute_normals"},
-                            {"label": "Include density", "value": "include_density"},
-                            {"label": "Write silver tier", "value": "write_silver"},
-                            {"label": "Save PLY previews", "value": "save_ply"},
-                            {"label": "Compress output", "value": "compress_output"},
-                        ],
-                        value=["compute_normals", "include_density", "write_silver", "save_ply"],
-                        inline=True,
-                        switch=True,
-                    ), wide=True),
-                ],
-                className="ops-field-grid",
+                className="preproc-workflow-stage-list",
             ),
         ],
         className="preproc-tab-body",
     )
 
 
+def _exec_plan_col(num, head, body):
+    return html.Div(
+        [
+            html.Span(num, className="preproc-exec-num"),
+            html.Div(
+                [
+                    html.Div(head, className="preproc-exec-col-head"),
+                    html.Div(body, className="preproc-exec-col-text"),
+                ],
+            ),
+        ],
+        className="preproc-exec-col",
+    )
+
+
+def _exec_step(num, text):
+    return html.Div(
+        [
+            html.Span(num, className="preproc-exec-step-num"),
+            html.Span(text, className="preproc-exec-step-text"),
+        ],
+        className="preproc-exec-step",
+    )
+
+
 def _tab_execute():
     return html.Div(
         [
+            # ── Tab header ────────────────────────────────────────────────
             html.Div(
                 [
                     html.Div("Step 03", className="data-explorer-eyebrow"),
-                    html.H3("MLOps and Airflow Execution"),
+                    html.H3("Execution Details & MLOps Tracking"),
                     html.P(
-                        "Set tracking destinations, review the generated DAG conf, "
-                        "and trigger the remote Airflow preprocessing run."
+                        "Review DAG parameters, configure MLflow experiment tracking, "
+                        "and inspect the full preprocessing run status."
                     ),
                 ],
                 className="preproc-tab-head",
             ),
-            _section_label("Tracking and MLOps"),
+
+            # ── Redirect note ─────────────────────────────────────────────
+            html.Div(
+                [
+                    html.Span("Trigger preprocessing and monitor live Airflow run status in the ", className="preproc-exec-redirect-text"),
+                    html.Strong("Dataset tab", className="preproc-exec-redirect-strong"),
+                    html.Span(".", className="preproc-exec-redirect-text"),
+                ],
+                className="preproc-exec-redirect-note",
+            ),
+
+            # ── MLflow workstation card ───────────────────────────────────
             html.Div(
                 [
                     html.Div(
                         [
-                            dbc.Label("MLflow Tracking URI"),
-                            dbc.Input(
-                                id="preproc-mlflow-tracking-uri",
-                                value=DEFAULT_MLFLOW_TRACKING_URI,
-                                placeholder="./mlruns or http://mlflow-host:5000",
-                                persistence=True,
-                                persistence_type="session",
-                            ),
-                            html.A(
-                                dbc.Button(
-                                    "Open MLflow",
-                                    id="preproc-open-mlflow-button",
-                                    color="info",
-                                    outline=True,
-                                    size="sm",
-                                    className="mt-2 w-100",
-                                ),
-                                id="preproc-open-mlflow-link",
-                                href=mlflow_browser_url(DEFAULT_MLFLOW_TRACKING_URI),
-                                target="_blank",
-                                rel="noopener noreferrer",
-                            ),
+                            html.Span("MLflow Workstation", className="preproc-mlflow-badge"),
+                            html.Span("http://100.88.150.103:5003", className="preproc-mlflow-host"),
                         ],
-                        className="ops-field",
+                        className="preproc-mlflow-card-head",
                     ),
-                    _field("MLflow Experiment", dbc.Input(id="preproc-mlflow-experiment", value="mls-preprocessing", persistence=True, persistence_type="session")),
-                    _field("DVC Remote", dbc.Input(id="preproc-dvc-remote", value="b2remote", persistence=True, persistence_type="session")),
-                    _field("MLflow Run Name", dbc.Input(id="preproc-mlflow-run-name", placeholder="Optional; defaults to dataset + run id", persistence=True, persistence_type="session")),
-                    _field("Tracking Options", dbc.Checklist(
-                        id="preproc-mlops-flags",
-                        options=[
-                            {"label": "Log small MLflow artifacts", "value": "log_artifacts"},
-                            {"label": "Disable MLflow", "value": "disable_mlflow"},
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    dbc.Label("Tracking URI"),
+                                    dbc.Input(
+                                        id="preproc-mlflow-tracking-uri",
+                                        value=DEFAULT_MLFLOW_TRACKING_URI,
+                                        placeholder="./mlruns or http://mlflow-host:5000",
+                                        persistence=True,
+                                        persistence_type="session",
+                                    ),
+                                ],
+                                className="preproc-mlflow-uri-col",
+                            ),
+                            html.Div(
+                                [
+                                    html.A(
+                                        dbc.Button(
+                                            "Open MLflow",
+                                            id="preproc-open-mlflow-button",
+                                            color="info",
+                                            outline=True,
+                                            size="sm",
+                                            className="w-100",
+                                        ),
+                                        id="preproc-open-mlflow-link",
+                                        href=mlflow_browser_url(DEFAULT_MLFLOW_TRACKING_URI),
+                                        target="_blank",
+                                        rel="noopener noreferrer",
+                                    ),
+                                    html.A(
+                                        [html.Span("Experiments / Active Runs"), html.Span(" →", className="preproc-mlflow-arrow")],
+                                        href=(
+                                            "http://100.88.150.103:5003/#/experiments/4/runs"
+                                            "?searchFilter=&orderByKey=attributes.start_time"
+                                            "&orderByAsc=false&startTime=ALL"
+                                            "&lifecycleFilter=Active&modelVersionFilter=All+Runs"
+                                            "&datasetsFilter=W10%3D"
+                                        ),
+                                        target="_blank",
+                                        rel="noopener noreferrer",
+                                        className="preproc-mlflow-exp-link",
+                                    ),
+                                ],
+                                className="preproc-mlflow-btns",
+                            ),
                         ],
-                        value=["log_artifacts"],
-                        inline=True,
-                        switch=True,
-                    ), wide=True),
+                        className="preproc-mlflow-row",
+                    ),
+                    html.Div(
+                        [
+                            _field("MLflow Experiment", dbc.Input(id="preproc-mlflow-experiment", value="mls-preprocessing", persistence=True, persistence_type="session")),
+                            _field("MLflow Run Name", dbc.Input(id="preproc-mlflow-run-name", placeholder="Optional; defaults to dataset + run id", persistence=True, persistence_type="session")),
+                            _field("DVC Remote", dbc.Input(id="preproc-dvc-remote", value="b2remote", persistence=True, persistence_type="session")),
+                            _field("Tracking Options", dbc.Checklist(
+                                id="preproc-mlops-flags",
+                                options=[
+                                    {"label": "Log small MLflow artifacts", "value": "log_artifacts"},
+                                    {"label": "Disable MLflow", "value": "disable_mlflow"},
+                                ],
+                                value=["log_artifacts"],
+                                inline=True,
+                                switch=True,
+                            ), wide=True),
+                        ],
+                        className="ops-field-grid preproc-mlflow-fields",
+                    ),
                 ],
-                className="ops-field-grid",
+                className="preproc-mlflow-card",
             ),
+
+            # ── Parameter preview tables ──────────────────────────────────
             html.Hr(className="preproc-tab-divider"),
             html.Div(
                 [
@@ -910,13 +1225,9 @@ def _tab_execute():
                 ],
                 className="ops-review-grid",
             ),
-            html.Div(
-                [
-                    dbc.Button("Start Preprocessing", id="preproc-trigger-airflow-button", color="success", className="ops-trigger-button"),
-                ],
-                className="ops-trigger-row",
-            ),
-            html.Div(id="preproc-action-message", className="mt-3"),
+
+            # ── Full DAG run status panel ─────────────────────────────────
+            html.Div(id="preproc-airflow-monitor-panel", className="mt-4"),
         ],
         className="preproc-tab-body",
     )
@@ -1535,6 +1846,347 @@ def verify_silver_outputs(manual_clicks, airflow_status, dataset_id, prep_versio
 
     verification = verify_b2_silver_outputs(dataset_id, prefix)
     return verification, _verification_panel(verification)
+
+
+def _airflow_grid_url(dag_id, dag_run_id=None):
+    base = (AIRFLOW_BASE_URL or "http://100.88.150.103:8080").rstrip("/")
+    safe_dag = dag_id or AIRFLOW_PREPROCESSING_DAG_ID or AIRFLOW_DAG_ID
+    url = f"{base}/dags/{safe_dag}/grid"
+    if dag_run_id:
+        url = f"{url}?dag_run_id={dag_run_id}"
+    return url
+
+
+@callback(
+    Output("preproc-airflow-monitor-panel", "children"),
+    Input("preproc-airflow-status-store", "data"),
+    Input("preproc-dag-run-store", "data"),
+)
+def render_airflow_monitor_panel(status, dag_run):
+    dag_run_id = (dag_run or {}).get("dag_run_id") or (status or {}).get("dag_run_id")
+    if not dag_run_id:
+        return html.Div(
+            [
+                html.Div(
+                    [
+                        html.Span("Airflow DAG Monitor", className="preproc-monitor-title"),
+                        html.A(
+                            dbc.Button("Open Airflow", color="info", outline=True, size="sm", disabled=True),
+                            href=_airflow_grid_url(AIRFLOW_PREPROCESSING_DAG_ID),
+                            target="_blank",
+                            rel="noopener noreferrer",
+                        ),
+                    ],
+                    className="preproc-monitor-header",
+                ),
+                html.Div(
+                    empty_state("DAG run", "Trigger Start Preprocessing to begin tracking run status, progress, and task states here."),
+                    className="mt-2",
+                ),
+            ],
+            className="preproc-monitor-panel",
+        )
+
+    dag_id = (dag_run or {}).get("dag_id") or (status or {}).get("dag_id") or AIRFLOW_PREPROCESSING_DAG_ID
+    state = (status or dag_run or {}).get("state", "queued")
+    grid_url = _airflow_grid_url(dag_id, dag_run_id)
+
+    completed = int((status or {}).get("completed_tasks") or 0)
+    total = int((status or {}).get("total_tasks") or 0)
+    running = int((status or {}).get("running_tasks") or (1 if state in {"running", "queued", "scheduled"} and completed < total else 0))
+    failed_task = (status or {}).get("failed_task") or ""
+    tasks = (status or {}).get("tasks") or []
+    failed_count = sum(1 for t in tasks if t.get("state") in {"failed", "upstream_failed"})
+    pending_count = max(0, total - completed - (1 if running else 0) - failed_count)
+
+    header = html.Div(
+        [
+            html.Div(
+                [
+                    html.Span("Airflow DAG Monitor", className="preproc-monitor-title"),
+                    small_status("DAG", state),
+                ],
+                className="preproc-monitor-title-row",
+            ),
+            html.A(
+                dbc.Button("Open Airflow DAG", color="info", outline=True, size="sm"),
+                href=grid_url,
+                target="_blank",
+                rel="noopener noreferrer",
+            ),
+        ],
+        className="preproc-monitor-header",
+    )
+
+    task_summary = html.Div(
+        [
+            html.Div(
+                [
+                    html.Span(str(completed), className="preproc-monitor-count preproc-monitor-count-done"),
+                    html.Span("Completed", className="preproc-monitor-count-label"),
+                ],
+                className="preproc-monitor-count-cell",
+            ),
+            html.Div(
+                [
+                    html.Span(str(running), className="preproc-monitor-count preproc-monitor-count-run"),
+                    html.Span("Running", className="preproc-monitor-count-label"),
+                ],
+                className="preproc-monitor-count-cell",
+            ),
+            html.Div(
+                [
+                    html.Span(str(pending_count), className="preproc-monitor-count preproc-monitor-count-pend"),
+                    html.Span("Pending", className="preproc-monitor-count-label"),
+                ],
+                className="preproc-monitor-count-cell",
+            ),
+            html.Div(
+                [
+                    html.Span(str(failed_count), className="preproc-monitor-count preproc-monitor-count-fail"),
+                    html.Span("Failed", className="preproc-monitor-count-label"),
+                ],
+                className="preproc-monitor-count-cell",
+            ),
+        ],
+        className="preproc-monitor-counts",
+    )
+
+    return html.Div(
+        [header, task_summary, _status_panel(status)],
+        className="preproc-monitor-panel",
+    )
+
+
+@callback(
+    Output("preproc-sidebar-dag-status", "children"),
+    Input("preproc-airflow-status-store", "data"),
+    Input("preproc-dag-run-store", "data"),
+)
+def render_sidebar_dag_status(status, dag_run):
+    dag_run_id = (dag_run or {}).get("dag_run_id") or (status or {}).get("dag_run_id")
+    if not dag_run_id:
+        return None
+
+    dag_id = (dag_run or {}).get("dag_id") or (status or {}).get("dag_id") or AIRFLOW_PREPROCESSING_DAG_ID
+    state = (status or dag_run or {}).get("state", "queued")
+    grid_url = _airflow_grid_url(dag_id, dag_run_id)
+    current_task = (status or {}).get("current_task") or ""
+    progress = (status or {}).get("progress_pct") or 0
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    small_status("DAG", state),
+                    html.A(
+                        "Open DAG →",
+                        href=grid_url,
+                        target="_blank",
+                        rel="noopener noreferrer",
+                        className="preproc-sidebar-dag-link",
+                    ),
+                ],
+                className="preproc-sidebar-dag-row",
+            ),
+            dbc.Progress(
+                value=min(max(float(progress or 0), 0), 100),
+                striped=state in {"queued", "running"},
+                animated=state == "running",
+                className="preproc-sidebar-progress",
+            ),
+            html.Div(
+                current_task or dag_run_id,
+                className="preproc-sidebar-dag-run-id",
+            ),
+        ],
+        className="preproc-sidebar-dag-status-card",
+    )
+
+
+@callback(
+    Output("preproc-dataset-airflow-monitor", "children"),
+    Input("preproc-airflow-status-store", "data"),
+    Input("preproc-dag-run-store", "data"),
+)
+def render_dataset_airflow_monitor(status, dag_run):
+    dag_run_id = (dag_run or {}).get("dag_run_id") or (status or {}).get("dag_run_id")
+    dag_id = (dag_run or {}).get("dag_id") or (status or {}).get("dag_id") or AIRFLOW_PREPROCESSING_DAG_ID
+    dag_grid_url = _airflow_grid_url(dag_id)
+
+    if not dag_run_id:
+        return html.Div(
+            [
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Span("Airflow DAG Monitor", className="preproc-monitor-title"),
+                                html.Div(
+                                    dag_id or "lidar_preprocessing_pipeline",
+                                    className="preproc-monitor-dag-name",
+                                ),
+                            ],
+                            className="preproc-monitor-title-group",
+                        ),
+                        html.A(
+                            dbc.Button("Open Airflow DAG", color="info", outline=True, size="sm"),
+                            href=dag_grid_url,
+                            target="_blank",
+                            rel="noopener noreferrer",
+                        ),
+                    ],
+                    className="preproc-monitor-header",
+                ),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Span("Status", className="preproc-monitor-field-label"),
+                                html.Span("Not started", className="preproc-monitor-field-value preproc-monitor-field-idle"),
+                            ],
+                            className="preproc-monitor-field",
+                        ),
+                        html.Div(
+                            [
+                                html.Span("Current Stage", className="preproc-monitor-field-label"),
+                                html.Span("—", className="preproc-monitor-field-value preproc-monitor-field-idle"),
+                            ],
+                            className="preproc-monitor-field",
+                        ),
+                    ],
+                    className="preproc-monitor-fields-row",
+                ),
+                dbc.Progress(value=0, className="preproc-monitor-progress mt-2"),
+                html.Div(
+                    [
+                        html.Div(
+                            [html.Span("0", className="preproc-monitor-count preproc-monitor-count-done"), html.Span("Completed", className="preproc-monitor-count-label")],
+                            className="preproc-monitor-count-cell",
+                        ),
+                        html.Div(
+                            [html.Span("0", className="preproc-monitor-count preproc-monitor-count-run"), html.Span("Running", className="preproc-monitor-count-label")],
+                            className="preproc-monitor-count-cell",
+                        ),
+                        html.Div(
+                            [html.Span("0", className="preproc-monitor-count preproc-monitor-count-pend"), html.Span("Pending", className="preproc-monitor-count-label")],
+                            className="preproc-monitor-count-cell",
+                        ),
+                        html.Div(
+                            [html.Span("0", className="preproc-monitor-count preproc-monitor-count-fail"), html.Span("Failed", className="preproc-monitor-count-label")],
+                            className="preproc-monitor-count-cell",
+                        ),
+                    ],
+                    className="preproc-monitor-counts mt-2",
+                ),
+                html.Div(
+                    "Trigger Start Preprocessing from the Execute tab to begin tracking.",
+                    className="preproc-monitor-hint mt-2",
+                ),
+            ],
+            className="preproc-monitor-panel",
+        )
+
+    state = (status or dag_run or {}).get("state", "queued")
+    run_url = _airflow_grid_url(dag_id, dag_run_id)
+    current_task = (status or {}).get("current_task") or ""
+    progress = float((status or {}).get("progress_pct") or 0)
+    completed = int((status or {}).get("completed_tasks") or 0)
+    total = int((status or {}).get("total_tasks") or 0)
+    tasks = (status or {}).get("tasks") or []
+    failed_count = sum(1 for t in tasks if t.get("state") in {"failed", "upstream_failed"})
+    running_count = int((status or {}).get("running_tasks") or (1 if state in {"running", "queued", "scheduled"} and completed < total else 0))
+    pending_count = max(0, total - completed - (1 if running_count else 0) - failed_count)
+    last_updated = (status or {}).get("updated_at") or (dag_run or {}).get("updated_at") or ""
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span("Airflow DAG Monitor", className="preproc-monitor-title"),
+                            html.Div(
+                                dag_id or "lidar_preprocessing_pipeline",
+                                className="preproc-monitor-dag-name",
+                            ),
+                        ],
+                        className="preproc-monitor-title-group",
+                    ),
+                    html.Div(
+                        [
+                            html.A(
+                                dbc.Button("Open Airflow DAG", color="info", outline=True, size="sm", className="me-2"),
+                                href=dag_grid_url,
+                                target="_blank",
+                                rel="noopener noreferrer",
+                            ),
+                            html.A(
+                                dbc.Button("Open Current Run", color="secondary", outline=True, size="sm"),
+                                href=run_url,
+                                target="_blank",
+                                rel="noopener noreferrer",
+                            ),
+                        ],
+                        className="d-flex",
+                    ),
+                ],
+                className="preproc-monitor-header",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span("Status", className="preproc-monitor-field-label"),
+                            small_status("DAG", state),
+                        ],
+                        className="preproc-monitor-field",
+                    ),
+                    html.Div(
+                        [
+                            html.Span("Current Stage", className="preproc-monitor-field-label"),
+                            html.Span(current_task or "—", className="preproc-monitor-field-value"),
+                        ],
+                        className="preproc-monitor-field",
+                    ),
+                ],
+                className="preproc-monitor-fields-row",
+            ),
+            dbc.Progress(
+                value=min(max(progress, 0), 100),
+                label=f"{progress:.0f}%",
+                striped=state in {"queued", "running"},
+                animated=state == "running",
+                className="preproc-monitor-progress mt-2",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [html.Span(str(completed), className="preproc-monitor-count preproc-monitor-count-done"), html.Span("Completed", className="preproc-monitor-count-label")],
+                        className="preproc-monitor-count-cell",
+                    ),
+                    html.Div(
+                        [html.Span(str(running_count), className="preproc-monitor-count preproc-monitor-count-run"), html.Span("Running", className="preproc-monitor-count-label")],
+                        className="preproc-monitor-count-cell",
+                    ),
+                    html.Div(
+                        [html.Span(str(pending_count), className="preproc-monitor-count preproc-monitor-count-pend"), html.Span("Pending", className="preproc-monitor-count-label")],
+                        className="preproc-monitor-count-cell",
+                    ),
+                    html.Div(
+                        [html.Span(str(failed_count), className="preproc-monitor-count preproc-monitor-count-fail"), html.Span("Failed", className="preproc-monitor-count-label")],
+                        className="preproc-monitor-count-cell",
+                    ),
+                ],
+                className="preproc-monitor-counts mt-2",
+            ),
+            html.Div(
+                f"Run ID: {dag_run_id}" + (f"  ·  Updated: {last_updated[:19].replace('T', ' ')}" if last_updated else ""),
+                className="preproc-monitor-hint mt-2",
+            ),
+        ],
+        className="preproc-monitor-panel",
+    )
 
 
 @callback(
