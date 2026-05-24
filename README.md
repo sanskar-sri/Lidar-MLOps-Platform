@@ -1,23 +1,24 @@
-# LiDAR Data Platform
+# LiDAR MLOps Platform
 
-> An end-to-end geospatial data engineering and MLOps platform for managing mobile LiDAR point clouds, preparing model-ready datasets, and orchestrating 3D building segmentation workflows.
+> Cloud-portable geospatial data engineering and MLOps platform for mobile LiDAR building identification — Bronze/Silver/Gold data lake, Airflow orchestration, MLflow experiment tracking, DVC dataset versioning, and 3D deep learning segmentation with downstream risk and exposure analytics.
 
+[![CI](https://github.com/sanskar-sri/lidar-mlops-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/sanskar-sri/lidar-mlops-platform/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11-blue?style=flat-square)
-![Dash](https://img.shields.io/badge/Dash-2.x-informational?style=flat-square)
 ![Airflow](https://img.shields.io/badge/Apache_Airflow-orchestration-017CEE?style=flat-square)
 ![MLflow](https://img.shields.io/badge/MLflow-experiment_tracking-0194E2?style=flat-square)
+![DVC](https://img.shields.io/badge/DVC-dataset_versioning-13ADC7?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker-containerised-2496ED?style=flat-square)
-![Storage](https://img.shields.io/badge/Backblaze_B2-object_storage-E02020?style=flat-square)
+![Storage](https://img.shields.io/badge/Backblaze_B2-S3_compatible-E02020?style=flat-square)
 
 ---
 
 ## Overview
 
-Raw mobile LiDAR files are large, unstructured, dataset-specific, and not directly usable for machine learning. A segmentation model alone is not enough for a real geospatial AI workflow.
+I build production-grade geospatial data platforms and MLOps pipelines — processing 119.78M+ mobile LiDAR points through a governed Bronze/Silver/Gold lake, orchestrating preprocessing with Airflow on remote GPU workers, tracking experiments with MLflow, versioning datasets with DVC, and delivering 3D building segmentation (92.82% accuracy) with downstream risk and exposure analytics. Industry background in Snowflake medallion warehouses with dbt Core, BigQuery lakehouses, and cloud data pipelines for global enterprise clients.
 
-This platform bridges that gap. It turns raw `.ply`, `.las`, and `.laz` survey files into a governed data lake with dataset registration, metadata analytics, preprocessing orchestration, Silver / Gold artifact validation, training handoff, and experiment-tracking integration — across a Bronze → Silver → Gold pipeline on Backblaze B2 object storage.
+Raw mobile LiDAR files are large, unstructured, dataset-specific, and not directly usable for machine learning. This platform bridges that gap — turning raw `.ply`, `.las`, and `.laz` survey files into a governed data lake with dataset registration, metadata analytics, preprocessing orchestration, Silver/Gold artifact validation, training handoff, and experiment-tracking integration.
 
-**Target use cases:** urban digital twins · smart-city mapping · building inventory generation · flood and disaster risk exposure · infrastructure asset monitoring · geospatial AI data management.
+**Target use cases:** urban digital twins · smart-city mapping · building inventory generation · flood and disaster risk exposure · infrastructure asset monitoring · geospatial AI data management · catastrophe modelling input data
 
 ---
 
@@ -42,20 +43,21 @@ This platform bridges that gap. It turns raw `.ply`, `.las`, and `.laz` survey f
 ```mermaid
 flowchart LR
     A["Raw LiDAR files\nPLY / LAS / LAZ"] --> B["Bronze layer\nsource files + manifests"]
-    B --> C["Dataset registry\nmetadata + analytics"]
+    B --> C["Dataset registry\nmetadata + Parquet analytics"]
     C --> D["Dash control plane\nupload · explore · trigger · monitor"]
     D --> E["Airflow preprocessing DAG\nremote workstation / GPU worker"]
     E --> F["Silver layer\ncleaned point cloud + stats"]
     F --> G["Gold layer\nmodel-ready blocks + scenes"]
     G --> H["Training workflow\nPointNet++ / RandLA-Net / PTv3"]
     H --> I["MLflow + DVC\nexperiments + versioned outputs"]
+    I --> J["Risk & Exposure\nflood scoring · building inventory · GIS export"]
 ```
 
 ---
 
 ## Data Lake Layout
 
-The platform uses a six-zone layout on Backblaze B2, mirroring a medallion architecture extended for the full ML lifecycle:
+Six-zone layout on Backblaze B2 (S3-compatible) — medallion architecture extended for the full ML lifecycle:
 
 ```text
 Building-Identification-MLS/
@@ -96,8 +98,8 @@ Building-Identification-MLS/
     ├── metadata/
     │   └── datasets/                   # dataset registry JSON files
     ├── metadata_analytics/
-    │   └── <dataset_id>/               # Parquet analytics (file summary, label distribution,
-    │                                   #   spatial summary, quality checks, KPIs)
+    │   └── <dataset_id>/               # Parquet analytics: file summary, label distribution,
+    │                                   #   spatial summary, quality checks, density grids, KPIs
     ├── benchmark_results/              # committed model accuracy and IoU reports
     ├── lineage/                        # dataset-to-run lineage records
     ├── qc_reports/                     # automated quality check outputs
@@ -107,19 +109,49 @@ Building-Identification-MLS/
 
 ---
 
+## Results
+
+Model benchmarks on mobile LiDAR building segmentation (binary: building / non-building):
+
+| Model | Overall accuracy | Building IoU | Non-building IoU | Notes |
+|---|---|---|---|---|
+| PointNet++ | **92.82%**  | — | — | Block-based baseline |
+| PointNet++ MSG | — | — | — | Multi-scale grouping |
+| RandLA-Net | — | — | — | Large-scale efficient baseline |
+| **PTv3** | —| — | — | Best performing architecture |
+
+> Full per-class metrics and dataset-level benchmark reports are committed under `06_governance/benchmark_results/`.
+
+---
+
+## Risk & Exposure Analytics
+
+The platform computes downstream risk metrics from LiDAR-derived building detection outputs — directly applicable to catastrophe modelling, property exposure management, and insurance analytics workflows:
+
+- **Flood depth exposure scoring** — per-building flood risk classification from LiDAR-derived elevation and detection confidence, suitable for integration with regulated flood zone datasets
+- **Building height classification** — low / mid / high-rise categorisation from Z-axis point density in detected building clusters
+- **Detection confidence scoring** — model confidence per detected building cluster for exposure data quality filtering and auditability
+- **Building inventory pipeline** — end-to-end workflow from raw LiDAR scan to structured building inventory with spatial attributes, class labels, and confidence scores
+- **GIS export** — GeoJSON and GeoParquet outputs for spatial join against external hazard zone datasets (flood plains, seismic zones, OSM infrastructure proximity)
+
+This module maps directly to exposure data engineering workflows at catastrophe modelling firms (RMS, AIR, Verisk), re/insurance companies (Swiss Re, Moody's, CoreLogic), and location intelligence platforms (HERE, Precisely, Esri).
+
+---
+
 ## Platform Workflow
 
 ```
-1. Upload raw .ply / .las / .laz files and label maps
-2. Validate file integrity with checksums and upload manifests
-3. Generate dataset metadata, spatial summaries, class mappings, and quality checks
-4. Explore datasets through the Dash dashboard and analytics panels
-5. Trigger preprocessing via Airflow using a minimal run configuration
-6. Poll Airflow for DAG state, task progress, and failure detail
-7. Verify Silver outputs: cleaned point cloud, stats, density grids
-8. Unlock Gold model-ready outputs when the dataset contract is validated
-9. Monitor training jobs and connect outputs to MLflow / DVC workflows
-10. Export GIS outputs and run risk exposure analysis
+1.  Upload raw .ply / .las / .laz files and label maps
+2.  Validate file integrity with checksums and upload manifests
+3.  Generate dataset metadata, spatial summaries, class mappings, and quality checks
+4.  Explore datasets through the Dash dashboard and Parquet analytics panels
+5.  Trigger preprocessing via Airflow using a minimal run configuration
+6.  Poll Airflow for DAG state, task progress, and failure detail
+7.  Verify Silver outputs: cleaned point cloud, stats, density grids
+8.  Unlock Gold model-ready outputs when the dataset contract is validated
+9.  Monitor training jobs and connect outputs to MLflow / DVC workflows
+10. Run RANSAC clustering on segmentation outputs for building candidate generation
+11. Export GIS outputs and compute risk exposure metrics
 ```
 
 ---
@@ -128,8 +160,8 @@ Building-Identification-MLS/
 
 | Page | Route | Purpose |
 |---|---|---|
-| Home | `/` | Platform overview and service health |
-| Data Explorer | `/data-explorer` | Upload raw LiDAR data, browse datasets, inspect analytics |
+| Home | `/` | Platform overview and live infrastructure health |
+| Data Explorer | `/data-explorer` | Upload raw LiDAR data, browse datasets, inspect Parquet analytics |
 | Preprocessing | `/preprocessing` | Configure, trigger, and monitor Airflow preprocessing runs |
 | Silver / Gold Outputs | `/silver-gold-outputs` | Validate preprocessing artifacts and dataset contracts |
 | Training | `/training` | Monitor model training workflows |
@@ -150,12 +182,12 @@ Building-Identification-MLS/
 
 | DAG | Trigger | Purpose |
 |---|---|---|
-| `lidar_preprocessing_pipeline` | Manual | Preprocessing on the remote GPU workstation |
+| `lidar_preprocessing_pipeline` | Manual | Full preprocessing run on the remote GPU workstation |
 | `lidar_training_pipeline` | Manual | Model training against Gold model-ready data |
 | `dag_health_b2` | Scheduled | B2 reachability and bucket prefix health check |
 | `dag_health_remote` | Scheduled | MLflow, GPU, OS, and runtime health on the workstation |
 
-The Dash controller does not run heavy preprocessing locally. It builds a minimal Airflow `conf` payload (`dataset_id`, `mode`, `run_id`), triggers the DAG via the Airflow REST API, polls task state, and reads generated artifacts from B2 or local cache.
+The Dash controller sends only `{dataset_id, mode, run_id}` to Airflow — pipeline defaults live on the workstation side. Full audit payloads are persisted locally under `data/airflow_preprocessing_requests/`.
 
 ---
 
@@ -176,14 +208,16 @@ The Dash controller does not run heavy preprocessing locally. It builds a minima
 |---|---|
 | Application & UI | Python, Dash, Dash Bootstrap Components, Plotly |
 | Point-cloud I/O | Open3D, plyfile, laspy, lazrs |
-| Geospatial | GeoPandas, Shapely, pyproj |
+| Geospatial | GeoPandas, Shapely, pyproj, GeoParquet |
 | Analytics | Pandas, PyArrow, Parquet |
-| Object storage | Backblaze B2 (S3-compatible via b2sdk + boto3) |
+| Object storage | Backblaze B2 — S3-compatible via b2sdk + boto3 |
 | Orchestration | Apache Airflow |
 | Experiment tracking | MLflow |
 | Dataset versioning | DVC |
 | 3D visualisation | Rerun SDK |
-| Machine learning | scikit-learn, PyTorch (training environment) |
+| Deep learning | PyTorch, PointNet++, RandLA-Net, PTv3 |
+| Post-processing | RANSAC clustering, scikit-learn |
+| CI | GitHub Actions, ruff |
 | Deployment | Docker, Docker Compose |
 
 ---
@@ -192,20 +226,25 @@ The Dash controller does not run heavy preprocessing locally. It builds a minima
 
 ```text
 .
-├── app.py                          # Dash app entrypoint
-├── pages/                          # Dashboard page modules (one per route)
-├── components/                     # Reusable UI cards and layout sections
-├── services/                       # B2, metadata, Airflow, MLflow, training, risk, GIS services
-├── airflow_dags/                   # Health-check DAGs and Airflow deployment notes
+├── app.py                               # Dash app entrypoint
+├── pages/                               # Dashboard page modules (one per route)
+├── components/                          # Reusable UI cards and layout sections
+├── services/                            # B2, metadata, Airflow, MLflow, training,
+│                                        #   risk, GIS, lineage, benchmark services
+├── airflow_dags/
 │   └── dags/
 │       ├── dag_health_b2.py
 │       └── dag_health_remote.py
 ├── scripts/
-│   └── compute_node_health_agent.py   # Windows workstation health agent
-├── assets/                         # CSS and browser-upload JavaScript
+│   └── compute_node_health_agent.py     # Windows workstation health agent
+├── tests/                               # Unit tests (pytest)
+├── .github/
+│   └── workflows/
+│       └── ci.yml                       # Lint and import checks on push
+├── assets/                              # CSS and browser-upload JavaScript
 ├── data/
-│   ├── metadata/                   # Local dataset registry cache
-│   └── metadata_analytics/         # Local Parquet analytics cache
+│   ├── metadata/                        # Local dataset registry cache
+│   └── metadata_analytics/             # Local Parquet analytics cache
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
@@ -217,15 +256,15 @@ The Dash controller does not run heavy preprocessing locally. It builds a minima
 
 ```bash
 # 1. Clone and create environment
-git clone https://github.com/<your-username>/data-platform.git
-cd data-platform
+git clone https://github.com/sanskar-sri/lidar-mlops-platform.git
+cd lidar-mlops-platform
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 # 2. Configure environment
 cp .env.example .env
-# Fill in B2, Airflow, and MLflow credentials
+# Fill in B2, Airflow, and MLflow credentials (see Environment Variables below)
 
 # 3. Run with Docker
 docker compose up --build
@@ -241,8 +280,6 @@ Default local services:
 ---
 
 ## Environment Variables
-
-Create a `.env` file with the following keys:
 
 ```env
 B2_KEY_ID=
@@ -264,30 +301,41 @@ SYSTEM_1_AIRFLOW_QUEUE=
 
 ## Key Design Decisions
 
-- **No heavy compute in the controller** — the Dash app triggers Airflow and reads artifacts; all preprocessing and training runs on a remote GPU workstation.
-- **Minimal Airflow conf** — the controller sends only `{dataset_id, mode, run_id}` to Airflow; pipeline defaults live on the workstation side. Full audit payloads are persisted locally under `data/airflow_preprocessing_requests/`.
-- **Lazy service imports** — all heavy dependencies are imported inside function bodies, keeping app startup fast and allowing the dashboard to load before any model or cloud libraries initialise.
-- **B2 as the single source of truth** — Silver and Gold artifacts are read from B2 after DAG completion, not from local disk, ensuring the dashboard and training environment share the same data layer.
+**No heavy compute in the controller**
+The Dash app triggers Airflow and reads artifacts. All preprocessing and model training runs on a remote GPU workstation. The controller never imports point-cloud or deep learning libraries in the request path.
+
+**Minimal Airflow conf**
+The controller sends only `{dataset_id, mode, run_id}` to Airflow. Pipeline defaults, paths, and hyperparameters live on the workstation side. Full audit payloads are persisted locally before the DAG is triggered — giving both a reproducible run record and a clean separation between orchestration and configuration.
+
+**Lazy service imports**
+All heavy dependencies (b2sdk, pandas, numpy, plyfile, laspy, pyarrow, open3d) are imported inside function bodies, not at module level. This keeps Dash app startup under 3 seconds regardless of which libraries are installed, and lets the dashboard load before any cloud or model libraries initialise.
+
+**B2 as the single source of truth**
+Silver and Gold artifacts are always read from B2 after DAG completion — not from local disk. This ensures the dashboard, training environment, and risk module all share the same data layer, eliminating drift between local cache and remote outputs.
+
+**S3-portable lake design**
+The bucket layout and all service code use S3-compatible semantics via boto3. Switching from Backblaze B2 to AWS S3 or GCS requires only environment variable changes — no code changes. This makes the architecture directly portable to enterprise AWS or GCP deployments.
 
 ---
 
 ## Roadmap
 
-- [ ] Public benchmark report with committed model metrics, dataset summaries, and per-class IoU
+- [ ] Complete per-class IoU benchmark table with all four model architectures
 - [ ] GIS export support for CityJSON and 3D Tiles formats
 - [ ] Model comparison dashboard with accuracy, IoU, latency, and confidence summaries
 - [ ] Fire spread risk scoring from inter-building distance and roof type classification
-- [ ] External hazard overlays via OSM Overpass API and open flood-zone datasets
-- [ ] CI checks for service imports, page registration, and metadata schema validation
-- [ ] Cloud reference architecture with cost-aware AWS / GCP deployment notes
+- [ ] External hazard overlays via OSM Overpass API and open flood-zone datasets (TRCA, PPRI Nord)
+- [ ] Earthquake exposure module — building height category joined against USGS / BRGM seismic hazard zones
+- [ ] CI expansion — service import checks, page registration validation, metadata schema tests
+- [ ] Cloud reference architecture with cost-aware AWS / GCP deployment guide
 
 ---
 
 ## Research & Acknowledgements
 
-This platform was developed as an M.Tech thesis project at **MNNIT Prayagraj** (Department of Geoinformatics).
+Developed as an M.Tech thesis project at **MNNIT Prayagraj** (Department of Geoinformatics).
 
-Findings were presented at **SPARC 2026, IIT Kanpur** — an internationally collaborative research programme supported by the Ministry of Education, Government of India.
+Presented at **SPARC 2026 International Conference, IIT Kanpur** — *Self-Supervised Learning for Near-Miss Pedestrian Risk Detection* — an internationally collaborative research programme supported by the Ministry of Education, Government of India.
 
 ---
 
