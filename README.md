@@ -21,6 +21,22 @@ This platform bridges that gap. It turns raw `.ply`, `.las`, and `.laz` survey f
 
 ---
 
+## Platform Screenshots
+
+**Dashboard — home page with live infrastructure status**
+
+![LiDAR Platform Home](assets/screenshots/dashboard_home.png)
+
+**Data Explorer — dataset analytics workspace showing 78M+ points indexed across 5 datasets**
+
+![Dataset Analytics Workspace](assets/screenshots/data_explorer.png)
+
+**Rerun 3D viewer — semantically labelled mobile LiDAR point cloud (street scene)**
+
+![Rerun 3D Semantic Label Viewer](assets/screenshots/rerun_3d_viewer.png)
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -186,7 +202,9 @@ The Dash controller does not run heavy preprocessing locally. It builds a minima
 │       └── dag_health_remote.py
 ├── scripts/
 │   └── compute_node_health_agent.py   # Windows workstation health agent
-├── assets/                         # CSS and browser-upload JavaScript
+├── assets/
+│   ├── screenshots/                # Dashboard and viewer screenshots
+│   └── ...                         # CSS and browser-upload JavaScript
 ├── data/
 │   ├── metadata/                   # Local dataset registry cache
 │   └── metadata_analytics/         # Local Parquet analytics cache
