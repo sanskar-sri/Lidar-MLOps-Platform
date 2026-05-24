@@ -1,3 +1,4 @@
+<img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 21 23 PM" src="https://github.com/user-attachments/assets/3786e45e-ca3d-4719-885f-d1f6b2c8feaa" />
 # LiDAR Data Platform
 
 > An end-to-end geospatial data engineering and MLOps platform for managing mobile LiDAR point clouds, preparing model-ready datasets, and orchestrating 3D building segmentation workflows.
