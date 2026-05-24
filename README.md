@@ -1,4 +1,3 @@
-<img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 21 23 PM" src="https://github.com/user-attachments/assets/3786e45e-ca3d-4719-885f-d1f6b2c8feaa" />
 # LiDAR Data Platform
 
 > An end-to-end geospatial data engineering and MLOps platform for managing mobile LiDAR point clouds, preparing model-ready datasets, and orchestrating 3D building segmentation workflows.
@@ -26,20 +25,15 @@ This platform bridges that gap. It turns raw `.ply`, `.las`, and `.laz` survey f
 
 **Dashboard — home page with live infrastructure status**
 
+<img width="1710" alt="LiDAR Platform Home" src="https://github.com/user-attachments/assets/3786e45e-ca3d-4719-885f-d1f6b2c8feaa" />
 
 **Data Explorer — dataset analytics workspace showing 78M+ points indexed across 5 datasets**
-<img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 20 07 PM" src="https://github.com/user-attachments/assets/98f82a45-e3a1-4511-8ff8-ec710992243f" />
 
-
-<img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 22 46 PM" src="https://github.com/user-attachments/assets/efaee334-c8f5-470d-9ad6-b0852fb51689" />
-
-![Dataset Analytics Workspace](assets/screenshots/data_explorer.png)
+<img width="1710" alt="Dataset Analytics Workspace" src="https://github.com/user-attachments/assets/98f82a45-e3a1-4511-8ff8-ec710992243f" />
 
 **Rerun 3D viewer — semantically labelled mobile LiDAR point cloud (street scene)**
 
-
-<img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 22 22 PM" src="https://github.com/user-attachments/assets/b6875c50-eaaa-47ab-ba91-c2765ec04977" />
-
+<img width="1710" alt="Rerun 3D Semantic Label Viewer" src="https://github.com/user-attachments/assets/b6875c50-eaaa-47ab-ba91-c2765ec04977" />
 
 ---
 
@@ -208,9 +202,7 @@ The Dash controller does not run heavy preprocessing locally. It builds a minima
 │       └── dag_health_remote.py
 ├── scripts/
 │   └── compute_node_health_agent.py   # Windows workstation health agent
-├── assets/
-│   ├── screenshots/                # Dashboard and viewer screenshots
-│   └── ...                         # CSS and browser-upload JavaScript
+├── assets/                         # CSS and browser-upload JavaScript
 ├── data/
 │   ├── metadata/                   # Local dataset registry cache
 │   └── metadata_analytics/         # Local Parquet analytics cache
