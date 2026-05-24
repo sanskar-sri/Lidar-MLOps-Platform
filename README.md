@@ -31,12 +31,15 @@ This platform bridges that gap. It turns raw `.ply`, `.las`, and `.laz` survey f
 <img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 20 07 PM" src="https://github.com/user-attachments/assets/98f82a45-e3a1-4511-8ff8-ec710992243f" />
 
 
+<img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 22 46 PM" src="https://github.com/user-attachments/assets/efaee334-c8f5-470d-9ad6-b0852fb51689" />
 
 ![Dataset Analytics Workspace](assets/screenshots/data_explorer.png)
 
 **Rerun 3D viewer — semantically labelled mobile LiDAR point cloud (street scene)**
 
-![Rerun 3D Semantic Label Viewer](assets/screenshots/rerun_3d_viewer.png)
+
+<img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 22 22 PM" src="https://github.com/user-attachments/assets/b6875c50-eaaa-47ab-ba91-c2765ec04977" />
+
 
 ---
 
