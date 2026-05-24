@@ -25,9 +25,11 @@ This platform bridges that gap. It turns raw `.ply`, `.las`, and `.laz` survey f
 
 **Dashboard — home page with live infrastructure status**
 
-![LiDAR Platform Home](assets/screenshots/dashboard_home.png)
 
 **Data Explorer — dataset analytics workspace showing 78M+ points indexed across 5 datasets**
+<img width="1710" height="1107" alt="Screenshot 2026-05-24 at 5 20 07 PM" src="https://github.com/user-attachments/assets/98f82a45-e3a1-4511-8ff8-ec710992243f" />
+
+
 
 ![Dataset Analytics Workspace](assets/screenshots/data_explorer.png)
 
