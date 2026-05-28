@@ -264,6 +264,18 @@ Large raw LiDAR files, generated Silver / Gold artifacts, model checkpoints, and
 | Airflow trigger sent an overly broad controller payload | Remote workstation owns pipeline defaults | Send minimal conf to Airflow while persisting the full controller audit payload locally |
 | Silver readers missed current DAG output layout | Current DAG writes key Silver analytics into an `analytics/` subfolder | Silver metadata loaders now try `analytics/` first and retain flat-path fallback |
 
+## Future Work — Risk & Exposure Intelligence
+
+The current risk module computes flood depth exposure, building height classification, and detection confidence scoring entirely from LiDAR-derived outputs. Planned extensions include:
+
+- **Fire spread risk** — proximity-based risk scoring using inter-building distance derived from building footprint polygons
+- **Roof type classification** — flat vs. sloped roof detection from Z-variance in the top point layer of each building cluster
+- **External hazard overlays** — spatial join against TRCA regulated flood zones (Toronto) and PPRI Nord flood prevention zones (Lille) via data.gouv.fr
+- **Critical infrastructure proximity** — distance from detected buildings to hospitals, schools, and emergency services via OSM Overpass API
+- **Earthquake exposure** — building height category joined against USGS / BRGM seismic hazard zones
+
+---
+
 ## Roadmap
 
 - Add a public benchmark report with committed model metrics and dataset summaries
