@@ -12,6 +12,10 @@ jobs:
     name: Dash CI
     runs-on: ubuntu-latest
 
+    env:
+      B2_KEY_ID_FOR_CHECK: ${{ secrets.B2_KEY_ID }}
+      B2_APPLICATION_KEY_FOR_CHECK: ${{ secrets.B2_APPLICATION_KEY }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,13 +100,13 @@ jobs:
       # Does NOT write to the bucket (read-only prefix listing only).
       # ----------------------------------------------------------------
       - name: B2 connection smoke test
-        if: ${{ secrets.B2_KEY_ID != '' && secrets.B2_APPLICATION_KEY != '' }}
+        if: ${{ env.B2_KEY_ID_FOR_CHECK != '' && env.B2_APPLICATION_KEY_FOR_CHECK != '' }}
         run: python scripts/test_b2_v2_connection.py
         env:
           B2_BUCKET_NAME: building-identification-mls-v2
           B2_ENDPOINT: https://s3.us-east-005.backblazeb2.com
-          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
-          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_KEY_ID: ${{ env.B2_KEY_ID_FOR_CHECK }}
+          B2_APPLICATION_KEY: ${{ env.B2_APPLICATION_KEY_FOR_CHECK }}
           B2_BRONZE_PREFIX: 01_raw_data/bronze_raw_data
           B2_GOLD_PREFIX: 02_preprocessing/gold_model_ready_data
           B2_TRAINING_RUNS_PREFIX: 03_segmentation/training_runs
