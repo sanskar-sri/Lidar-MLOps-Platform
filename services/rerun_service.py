@@ -32,7 +32,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from plyfile import PlyData
 
 try:
     import yaml
@@ -515,6 +514,7 @@ def read_real_ply_fields(
     if not local_path.exists():
         raise FileNotFoundError(local_path)
 
+    from plyfile import PlyData  # lazy: plyfile is a runtime-only dep not needed at import time
     ply = PlyData.read(str(local_path))
 
     vertex_names = [element.name for element in ply.elements]

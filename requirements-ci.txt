@@ -1,0 +1,25 @@
+# Lightweight CI dependencies — fast pull-request checks only.
+#
+# Intentionally excluded (remain in requirements.txt and Docker builds):
+#   open3d       — large 3D processing library, ~500 MB install
+#   rerun-sdk    — point-cloud visualisation runtime
+#   laspy        — LAS/LAZ point-cloud I/O
+#   plyfile      — PLY point-cloud I/O (lazy-imported in services/rerun_service.py)
+#   geopandas    — geospatial dataframe library
+#   shapely      — geometry library (geopandas dependency)
+#   pyproj       — CRS/projection library (geopandas dependency)
+#   scikit-learn — ML algorithms (training runtime only)
+
+dash>=2.17.0,<3.0.0
+dash-bootstrap-components>=1.6.0,<2.0.0
+plotly>=5.24.1,<6.0.0
+flask>=3.0.0,<4.0.0
+gunicorn>=22.0.0,<24.0.0
+requests>=2.31.0
+numpy>=2.0.0,<3.0.0
+pandas>=2.2.0,<3.0.0
+pyarrow>=18.0.0,<25.0.0
+python-dotenv>=1.0.1
+boto3>=1.34.0,<2.0.0
+b2sdk>=2.5.0
+pyyaml>=6.0.0

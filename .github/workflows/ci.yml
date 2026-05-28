@@ -1,0 +1,113 @@
+name: Lightweight Dash CI
+
+on:
+  push:
+    branches: [test, main]
+  pull_request:
+    branches: [test, main]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    name: Dash CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      # ----------------------------------------------------------------
+      # Dependencies
+      # ----------------------------------------------------------------
+      - name: Install CI dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ci.txt
+
+      # ----------------------------------------------------------------
+      # Safety: no secrets or runtime state files should be tracked
+      # ----------------------------------------------------------------
+      - name: Check no secrets or runtime files are tracked
+        run: |
+          fail=0
+
+          check_pattern() {
+            local label="$1"
+            local pattern="$2"
+            if git ls-files | grep -qE "$pattern"; then
+              echo "ERROR: tracked file matches '$label' — must not be committed"
+              git ls-files | grep -E "$pattern"
+              fail=1
+            fi
+          }
+
+          check_pattern ".env"                    "^\.env$"
+          check_pattern ".claude/worktrees/"      "^\.claude/worktrees/"
+          check_pattern "data/upload_sessions/"   "^data/upload_sessions/"
+          check_pattern "data/upload_progress/"   "^data/upload_progress/"
+          check_pattern "data/local_staging/"     "^data/local_staging/"
+
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+          echo "OK: no secrets or runtime files tracked"
+
+      # ----------------------------------------------------------------
+      # Syntax check
+      # ----------------------------------------------------------------
+      - name: Python syntax check (compileall)
+        run: |
+          targets=""
+          for path in app.py components pages services scripts; do
+            [ -e "$path" ] && targets="$targets $path"
+          done
+          python -m compileall -q $targets
+
+      # ----------------------------------------------------------------
+      # Import smoke tests
+      # Heavy runtime packages (open3d, rerun-sdk, laspy, plyfile,
+      # geopandas) are not installed; any top-level import of them in
+      # these modules would fail here and must be made lazy.
+      # ----------------------------------------------------------------
+      - name: Import smoke tests
+        run: |
+          python -c "import app; print('OK: app')"
+          python -c "import services.b2_paths; print('OK: services.b2_paths')"
+          python -c "import services.b2_service; print('OK: services.b2_service')"
+          python -c "import services.metadata_service; print('OK: services.metadata_service')"
+        env:
+          # Dummy values so b2_service loads without a real .env present.
+          # No actual B2 connection is made during import.
+          B2_BUCKET_NAME: building-identification-mls-v2
+          B2_ENDPOINT: https://s3.us-east-005.backblazeb2.com
+          B2_KEY_ID: ci-placeholder
+          B2_APPLICATION_KEY: ci-placeholder
+
+      # ----------------------------------------------------------------
+      # Optional B2 connection smoke test
+      # Skipped when repository secrets are not configured.
+      # Does NOT write to the bucket (read-only prefix listing only).
+      # ----------------------------------------------------------------
+      - name: B2 connection smoke test
+        if: ${{ secrets.B2_KEY_ID != '' && secrets.B2_APPLICATION_KEY != '' }}
+        run: python scripts/test_b2_v2_connection.py
+        env:
+          B2_BUCKET_NAME: building-identification-mls-v2
+          B2_ENDPOINT: https://s3.us-east-005.backblazeb2.com
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_BRONZE_PREFIX: 01_raw_data/bronze_raw_data
+          B2_GOLD_PREFIX: 02_preprocessing/gold_model_ready_data
+          B2_TRAINING_RUNS_PREFIX: 03_segmentation/training_runs
+          B2_SEGMENTATION_PREFIX: 03_segmentation/segmentation_outputs
+          B2_CLUSTERING_PREFIX: 04_clustering/clustered_final_outputs
+          B2_GIS_EXPORTS_PREFIX: 05_applications/gis_exports
+          B2_METADATA_PREFIX: 06_governance/metadata
+          B2_METADATA_ANALYTICS_PREFIX: 06_governance/metadata_analytics
