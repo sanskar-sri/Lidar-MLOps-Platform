@@ -10,3 +10,6 @@ data/mlflow/
 data/local_staging/
 data/rerun_outputs/
 data/upload_progress/
+
+# Runtime upload session state
+data/upload_sessions/
