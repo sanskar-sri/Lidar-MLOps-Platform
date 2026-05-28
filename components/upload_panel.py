@@ -1,8 +1,10 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc
+from services.b2_paths import B2_BUCKET_NAME, b2_prefix
 
 
 def upload_raw_data_panel():
+    _bronze = b2_prefix("bronze_raw_data")
     return dbc.Card(
         [
             dbc.CardHeader(html.H4("1. Upload Raw Data to B2")),
@@ -15,7 +17,7 @@ def upload_raw_data_panel():
                                     dbc.Label("Bucket"),
                                     dbc.Input(
                                         id="bucket-input",
-                                        value="Building-Identification-MLS",
+                                        value=B2_BUCKET_NAME,
                                         disabled=True,
                                     ),
                                 ],
@@ -95,7 +97,7 @@ def upload_raw_data_panel():
                             html.Strong("Standard B2 storage structure:"),
                             html.Br(),
                             html.Code(
-                                "b2://Building-Identification-MLS/bronze_raw_data/<dataset_id>/source_files/tiles/"
+                                f"b2://{B2_BUCKET_NAME}/{_bronze}/<dataset_id>/source_files/tiles/"
                             ),
                             html.Br(),
                             html.Span(
@@ -103,7 +105,7 @@ def upload_raw_data_panel():
                             ),
                             html.Br(),
                             html.Code(
-                                "b2://Building-Identification-MLS/bronze_raw_data/<dataset_id>/source_files/label_maps/"
+                                f"b2://{B2_BUCKET_NAME}/{_bronze}/<dataset_id>/source_files/label_maps/"
                             ),
                             html.Br(),
                             html.Span(
@@ -111,7 +113,7 @@ def upload_raw_data_panel():
                             ),
                             html.Br(),
                             html.Code(
-                                "b2://Building-Identification-MLS/bronze_raw_data/<dataset_id>/manifests/"
+                                f"b2://{B2_BUCKET_NAME}/{_bronze}/<dataset_id>/manifests/"
                             ),
                             html.Br(),
                             html.Span(
@@ -209,6 +211,18 @@ def upload_raw_data_panel():
                         "Use this only when the data folder is mounted into the Dash container, such as /datasets/torronto.",
                         color="warning",
                     ),
+                    dbc.Alert(
+                        [
+                            html.Strong("Docker Desktop limitation: "),
+                            "Files > ~200 MB on the VirtioFS host mount may fail with "
+                            "'Resource deadlock avoided'. If you see that error, use ",
+                            html.Strong("Reliable Browser Upload"),
+                            " above — the browser reads files directly from your Mac, "
+                            "bypassing VirtioFS entirely.",
+                        ],
+                        color="danger",
+                        className="mb-3",
+                    ),
 
                     dbc.Row(
                         [
@@ -255,6 +269,18 @@ def upload_raw_data_panel():
                     dbc.Alert(
                         "Use this when your folder contains multiple .ply tiles and label-map files. Tiles go to source_files/tiles/ and XML/JSON/YAML maps go to source_files/label_maps/.",
                         color="secondary",
+                    ),
+                    dbc.Alert(
+                        [
+                            html.Strong("Docker Desktop limitation: "),
+                            "Folder contents are read through the VirtioFS host mount. "
+                            "Files > ~200 MB frequently deadlock VirtioFS and all uploads "
+                            "in that batch will fail. For large .ply datasets, use ",
+                            html.Strong("Reliable Browser Upload"),
+                            " above instead.",
+                        ],
+                        color="danger",
+                        className="mb-3",
                     ),
 
                     dbc.Label("Local Folder Path"),

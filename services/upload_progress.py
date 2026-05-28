@@ -1,9 +1,11 @@
 import os
 import json
 from datetime import datetime
+from pathlib import Path
 
 
-PROGRESS_DIR = "data/upload_progress"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROGRESS_DIR = str(_PROJECT_ROOT / "data" / "upload_progress")
 
 
 def ensure_progress_dir():

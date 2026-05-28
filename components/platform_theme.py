@@ -2,6 +2,9 @@ import re
 
 from dash import dcc, html
 
+from components.lidar_particle_background import lidar_particle_background
+from components.platform_brand import platform_brand
+
 
 COLORS = {
     "bg": "#05070d",
@@ -27,27 +30,153 @@ HERO_STYLE = {
 }
 
 
-NAV_ITEMS = [
-    ("Home", "/"),
-    ("Data Explorer", "/data-explorer"),
-    ("Preprocessing", "/preprocessing"),
-    ("Training", "/training"),
-    ("Postprocessing", "/postprocessing"),
-    ("Control", "/control-panel"),
+NAV_GROUPS = [
+    {
+        "label": "Home",
+        "items": [{"label": "Home", "path": "/"}],
+    },
+    {
+        "label": "Data Management",
+        "items": [
+            {"label": "Data Explorer", "path": "/data-explorer"},
+            {"label": "Dataset Readiness", "path": "/dataset-readiness"},
+            {"label": "Silver & Gold Outputs", "path": "/silver-gold-outputs"},
+        ],
+    },
+    {
+        "label": "Processing & ML",
+        "items": [
+            {"label": "Preprocessing", "path": "/preprocessing"},
+            {"label": "Training", "path": "/training"},
+            {"label": "Postprocessing", "path": "/postprocessing"},
+        ],
+    },
+    {
+        "label": "GeoAI Products",
+        "items": [
+            {"label": "GIS Exports", "path": "/gis-exports"},
+            {"label": "Risk & Exposure", "path": "/risk-exposure"},
+        ],
+    },
+    {
+        "label": "Platform Operations",
+        "items": [
+            {"label": "Monitoring & Cost", "path": "/monitoring-cost"},
+            {"label": "Lineage & Governance", "path": "/lineage-governance"},
+            {"label": "API & Integration", "path": "/api-integration"},
+        ],
+    },
 ]
 
 
-def ops_nav(active):
+ACTIVE_ALIASES = {
+    "/": "Home",
+    "/data-explorer": "Data Explorer",
+    "/dataset-readiness": "Dataset Readiness",
+    "/silver-gold-outputs": "Silver & Gold Outputs",
+    "/preprocessing": "Preprocessing",
+    "/training": "Training",
+    "/postprocessing": "Postprocessing",
+    "/gis-exports": "GIS Exports",
+    "/risk-exposure": "Risk & Exposure",
+    "/monitoring-cost": "Monitoring & Cost",
+    "/control-panel": "Monitoring & Cost",
+    "/lineage-governance": "Lineage & Governance",
+    "/api-integration": "API & Integration",
+    "Readiness": "Dataset Readiness",
+    "Outputs": "Silver & Gold Outputs",
+    "Postprocessing": "Postprocessing",
+    "Exports": "GIS Exports",
+    "Risk": "Risk & Exposure",
+    "Monitoring": "Monitoring & Cost",
+    "Control": "Monitoring & Cost",
+    "Lineage": "Lineage & Governance",
+    "API": "API & Integration",
+}
+
+
+def _active_label(active):
+    return ACTIVE_ALIASES.get(active, active)
+
+
+def _group_is_active(group, active):
+    current = _active_label(active)
+    return group["label"] == current or any(item["label"] == current for item in group["items"])
+
+
+def _nav_link_kwargs(path, link_id_scope, variant):
+    if not link_id_scope:
+        return {}
+    return {
+        "id": {
+            "type": "platform-nav-link",
+            "scope": link_id_scope,
+            "variant": variant,
+            "path": path,
+        }
+    }
+
+
+def _item_href(item, href_overrides):
+    path = item["path"]
+    if href_overrides and path in href_overrides:
+        return href_overrides[path]
+    return path
+
+
+def _dropdown_group(group, active, href_overrides=None, link_id_scope=None):
+    current = _active_label(active)
+    is_active = _group_is_active(group, active)
+    return html.Div(
+        [
+            html.Button(
+                [html.Span(group["label"]), html.Span("▾", className="ops-nav-caret")],
+                className=(
+                    "ops-nav-dropdown-toggle ops-nav-link-active active"
+                    if is_active
+                    else "ops-nav-dropdown-toggle"
+                ),
+                type="button",
+            ),
+            html.Div(
+                [
+                    dcc.Link(
+                        item["label"],
+                        href=_item_href(item, href_overrides),
+                        className=(
+                            "ops-nav-dropdown-item active"
+                            if item["label"] == current
+                            else "ops-nav-dropdown-item"
+                        ),
+                        **_nav_link_kwargs(item["path"], link_id_scope, "desktop"),
+                    )
+                    for item in group["items"]
+                ],
+                className="ops-nav-dropdown-menu",
+            ),
+        ],
+        className="ops-nav-group ops-nav-dropdown",
+    )
+
+
+def ops_nav(active, class_name="", href_overrides=None, link_id_scope=None):
     return html.Nav(
         [
             dcc.Link(
-                label,
-                href=href,
-                className="ops-nav-link ops-nav-link-active" if label == active else "ops-nav-link",
+                group["label"],
+                href=_item_href(group["items"][0], href_overrides),
+                className=(
+                    "ops-nav-link ops-nav-link-active active"
+                    if _group_is_active(group, active)
+                    else "ops-nav-link"
+                ),
+                **_nav_link_kwargs(group["items"][0]["path"], link_id_scope, "desktop"),
             )
-            for label, href in NAV_ITEMS
+            if group["label"] == "Home"
+            else _dropdown_group(group, active, href_overrides, link_id_scope)
+            for group in NAV_GROUPS
         ],
-        className="ops-nav",
+        className=f"ops-nav {class_name}".strip(),
     )
 
 
@@ -56,28 +185,17 @@ def status_badge(label, tone="active"):
 
 
 def ops_brand(subtitle):
-    return html.Div(
-        [
-            html.Div(className="ops-brand-mark"),
-            html.Div(
-                [
-                    html.Div("LiDAR Platform", className="ops-brand-title"),
-                    html.Div(subtitle, className="ops-brand-subtitle"),
-                ]
-            ),
-        ],
-        className="ops-brand",
-    )
+    return platform_brand(subtitle, visual_context="ops")
 
 
 def ops_topbar(active, subtitle, status_label):
-    return html.Header(
-        [
-            ops_brand(subtitle),
-            ops_nav(active),
-            status_badge(status_label),
-        ],
-        className="ops-topbar",
+    from components.platform_header import platform_header
+
+    return platform_header(
+        active_path=active,
+        brand_subtitle=subtitle,
+        status_label=status_label,
+        visual_context="ops",
     )
 
 
@@ -94,7 +212,7 @@ def hero_metric(label, value):
 def platform_hero(canvas_id, eyebrow, title, accent, description, metrics, class_name=""):
     return html.Section(
         [
-            html.Canvas(id=canvas_id, className="ops-hero-canvas"),
+            lidar_particle_background(canvas_id, class_name="ops-hero-canvas"),
             html.Div(className="ops-hero-shade"),
             html.Div(
                 [

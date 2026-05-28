@@ -15,6 +15,8 @@ from urllib.parse import quote
 import dash
 from dash import Input, Output, callback, dcc, html
 
+from components.lidar_particle_background import lidar_particle_background
+from components.platform_header import platform_header
 from services.airflow_health_service import get_b2_file_count, get_backend_status_cards
 from services.metadata_service import list_registered_datasets
 
@@ -436,47 +438,20 @@ layout = html.Div(
             id="lp-toast-wrap",
         ),
 
-        html.Div(
-            className="lp-topbar",
-            children=[
-                html.Div(
-                    className="lp-brand",
-                    children=[
-                        html.Span(className="lp-brand-grid"),
-                        html.Div(
-                            [
-                                html.Div("LiDAR Platform", className="lp-brand-title"),
-                                html.Div(
-                                    "Data Explorer · Medallion Preprocessing · Training · Rerun",
-                                    className="lp-brand-subtitle",
-                                ),
-                            ],
-                            className="lp-brand-copy",
-                        ),
-                    ],
-                ),
-                html.Div(
-                    [
-                        dcc.Link("Home", href="/", className="lp-nav-link lp-nav-link-active"),
-                        dcc.Link("Data Explorer", href="/data-explorer", className="lp-nav-link"),
-                        dcc.Link("Preprocessing", href="/preprocessing", className="lp-nav-link"),
-                        dcc.Link("Training", href="/training", className="lp-nav-link"),
-                        dcc.Link("Postprocessing", href="/postprocessing", className="lp-nav-link"),
-                        dcc.Link("Control", href="/control-panel", className="lp-nav-link"),
-                    ],
-                    className="lp-nav",
-                ),
-                html.Div(
-                    [html.Span(className="lp-live-dot"), "Pipeline Active"],
-                    className="lp-live-pill",
-                ),
-            ],
+        platform_header(
+            active_path="/",
+            brand_subtitle="Data Explorer · Medallion Preprocessing · Training · Rerun",
+            status_label="Pipeline Active",
+            visual_context="home",
         ),
 
         html.Div(
             className="lp-hero",
             children=[
-                html.Canvas(id="lp-cv", **{"aria-label": "Animated LiDAR particle field"}),
+                lidar_particle_background(
+                    "lp-cv",
+                    aria_label="Animated LiDAR particle field",
+                ),
                 html.Div(
                     className="lp-hcnt",
                     children=[

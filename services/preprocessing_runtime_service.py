@@ -14,6 +14,7 @@ from services.b2_service import (
     get_b2_file_info_by_name,
     list_b2_files_with_prefix,
 )
+from services.b2_paths import b2_prefix
 
 
 load_dotenv()
@@ -392,10 +393,10 @@ def _verify_candidate(prefix, candidates, listing):
     }
 
 
-def verify_b2_silver_outputs(dataset_id, b2_prefix):
+def verify_b2_silver_outputs(dataset_id, b2_prefix_arg):
     """Verify expected Silver artifacts using real B2 object listings."""
 
-    prefix = _normalize_prefix(b2_prefix) or f"silver_preprocessed_data/{dataset_id}/prep_v001"
+    prefix = _normalize_prefix(b2_prefix_arg) or f"{b2_prefix('silver_preprocessed_data')}/{dataset_id}/prep_v001"
     try:
         listing = _list_b2_prefix(prefix)
         rows = []
@@ -439,7 +440,7 @@ def verify_b2_silver_outputs(dataset_id, b2_prefix):
 
 
 def build_gold_output_contract(dataset_id, prep_version):
-    prefix = f"gold_model_ready_data/{dataset_id}/{prep_version}"
+    prefix = f"{b2_prefix('gold_model_ready_data')}/{dataset_id}/{prep_version}"
     return {
         "bucket": B2_BUCKET_NAME,
         "prefix": prefix,
@@ -659,10 +660,10 @@ def _load_local_or_b2_parquet(local_path, b2_key):
         return {"data": None, "source": b2_key, "error": str(exc)}
 
 
-def load_local_or_b2_silver_metadata(dataset_id, b2_prefix):
+def load_local_or_b2_silver_metadata(dataset_id, b2_prefix_arg):
     """Load actual Silver JSON and Parquet outputs from cache first, then B2."""
 
-    prefix = _normalize_prefix(b2_prefix) or f"silver_preprocessed_data/{dataset_id}/prep_v001"
+    prefix = _normalize_prefix(b2_prefix_arg) or f"{b2_prefix('silver_preprocessed_data')}/{dataset_id}/prep_v001"
     local_dir = _local_silver_dir(dataset_id, prefix)
     meta_result = _load_silver_json(local_dir / "processed_cloud_meta.json", prefix, "processed_cloud_meta.json")
     stats_result = _load_silver_json(local_dir / "silver_stats.json", prefix, "silver_stats.json")
@@ -698,9 +699,9 @@ def load_local_or_b2_silver_metadata(dataset_id, b2_prefix):
     }
 
 
-def load_gold_metadata_if_available(dataset_id, prep_version, b2_prefix=None):
+def load_gold_metadata_if_available(dataset_id, prep_version, b2_prefix_arg=None):
     """Download gold artifacts to local staging on first load, then serve from disk."""
-    prefix = _normalize_prefix(b2_prefix) or f"gold_model_ready_data/{dataset_id}/{prep_version}"
+    prefix = _normalize_prefix(b2_prefix_arg) or f"{b2_prefix('gold_model_ready_data')}/{dataset_id}/{prep_version}"
     local_dir = _local_gold_dir(dataset_id, prep_version)
 
     artifacts = [

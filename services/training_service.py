@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from services.b2_service import B2_BUCKET_NAME
 from services.mlflow_service import DEFAULT_TRAINING_MLFLOW_TRACKING_URI
+from services.b2_paths import b2_prefix
 
 
 load_dotenv()
@@ -42,14 +43,14 @@ def build_training_storage_contract(dataset_id, prep_version, model_type, run_id
 
     return {
         "bucket": bucket,
-        "gold_input": f"b2://{bucket}/gold_model_ready_data/{dataset_id}/{prep_version}/",
+        "gold_input": f"b2://{bucket}/{b2_prefix('gold_model_ready_data')}/{dataset_id}/{prep_version}/",
         "training_output": (
-            f"b2://{bucket}/training_runs/{dataset_id}/{prep_version}/{model_type}/{run_id}/"
+            f"b2://{bucket}/{b2_prefix('training_runs')}/{dataset_id}/{prep_version}/{model_type}/{run_id}/"
         ),
         "segmentation_output": (
-            f"b2://{bucket}/segmentation_outputs/{dataset_id}/{prep_version}/{model_type}/{run_id}/"
+            f"b2://{bucket}/{b2_prefix('segmentation_outputs')}/{dataset_id}/{prep_version}/{model_type}/{run_id}/"
         ),
-        "training_logs": f"b2://{bucket}/logs/training/{dataset_id}/{run_id}/",
+        "training_logs": f"b2://{bucket}/{b2_prefix('logs')}/training/{dataset_id}/{run_id}/",
     }
 
 
@@ -109,11 +110,11 @@ def build_training_conf(
             "preprocessed_dataset_root": preprocessed_dataset_root,
             "artifact_root": artifact_root,
             "b2_bucket": storage["bucket"],
-            "b2_training_prefix": f"training_runs/{dataset_id}/{prep_version}/{model_type}/{run_id}",
+            "b2_training_prefix": f"{b2_prefix('training_runs')}/{dataset_id}/{prep_version}/{model_type}/{run_id}",
             "b2_segmentation_prefix": (
-                f"segmentation_outputs/{dataset_id}/{prep_version}/{model_type}/{run_id}"
+                f"{b2_prefix('segmentation_outputs')}/{dataset_id}/{prep_version}/{model_type}/{run_id}"
             ),
-            "b2_logs_prefix": f"logs/training/{dataset_id}/{run_id}",
+            "b2_logs_prefix": f"{b2_prefix('logs')}/training/{dataset_id}/{run_id}",
             "num_epochs": int(num_epochs),
             "batch_size": int(batch_size),
             "learning_rate": float(learning_rate),

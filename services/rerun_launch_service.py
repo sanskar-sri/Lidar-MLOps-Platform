@@ -30,6 +30,21 @@ _TILE_MAX_AGE_SECS = 86400  # 24 hours — cached PLY/LAS tiles kept one day
 JOB_REGISTRY: dict[str, dict[str, Any]] = {}
 
 
+def _web_viewer_url(rrd_path: str) -> str:
+    """
+    Build an app.rerun.io link that loads the .rrd from the running Dash server.
+
+    The DASH_PUBLIC_URL env var must be set to the Cloudflare tunnel URL
+    (e.g. https://random-name.trycloudflare.com) for this link to work for
+    remote users.  Falls back to localhost if not set.
+    """
+    import os
+    filename = Path(rrd_path).name
+    base = os.getenv("DASH_PUBLIC_URL", "http://localhost:8051").rstrip("/")
+    rrd_url = f"{base}/api/rerun-files/{filename}"
+    return f"https://app.rerun.io/?url={rrd_url}"
+
+
 def launch_rerun_job(
     dataset_id: str,
     tile_items: list[dict[str, Any]],
@@ -91,11 +106,13 @@ def launch_rerun_job(
                 JOB_REGISTRY[job_id].update({
                     "status": "done",
                     "message": viewer_msg,
+                    "web_viewer_url": _web_viewer_url(rrd_path),
                 })
             else:
                 JOB_REGISTRY[job_id].update({
                     "status": "done",
                     "message": "Recording saved.",
+                    "web_viewer_url": _web_viewer_url(rrd_path),
                 })
 
         except Exception as exc:

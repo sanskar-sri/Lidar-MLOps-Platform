@@ -14,18 +14,22 @@ from services.upload_progress import (
     mark_upload_completed,
     mark_upload_failed,
 )
+from services.b2_paths import b2_prefix, bronze_tiles_prefix, bronze_label_maps_prefix, bronze_manifest_prefix
 
 load_dotenv()
 
 B2_KEY_ID = os.getenv("B2_KEY_ID")
 B2_APPLICATION_KEY = os.getenv("B2_APPLICATION_KEY")
-B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME", "Building-Identification-MLS")
+B2_BUCKET_NAME = os.getenv("B2_BUCKET_NAME", "building-identification-mls-v2")
 LOCAL_STAGING_DIR = os.getenv("LOCAL_STAGING_DIR", "data/local_staging")
 DATASETS_HOST_PREFIX = os.getenv(
-    "DATASETS_HOST_PREFIX",
-    "/Users/sanskarsrivastava/Desktop/Datasets",
+    "DATASETS_HOST_ROOT",
+    os.getenv("DATASETS_HOST_PREFIX", "/Users/sanskarsrivastava/Desktop/Datasets"),
 )
-DATASETS_CONTAINER_PREFIX = os.getenv("DATASETS_CONTAINER_PREFIX", "/datasets")
+DATASETS_CONTAINER_PREFIX = os.getenv(
+    "DATASETS_CONTAINER_ROOT",
+    os.getenv("DATASETS_CONTAINER_PREFIX", "/datasets"),
+)
 
 
 SUPPORTED_TILE_EXTENSIONS = {
@@ -160,10 +164,10 @@ def get_b2_destination_path(dataset_id, local_file_path):
     Decide the correct B2 destination path based on file extension.
 
     Point cloud tiles:
-        bronze_raw_data/<dataset_id>/source_files/tiles/<filename>
+        01_raw_data/bronze_raw_data/<dataset_id>/source_files/tiles/<filename>
 
     Label maps:
-        bronze_raw_data/<dataset_id>/source_files/label_maps/<filename>
+        01_raw_data/bronze_raw_data/<dataset_id>/source_files/label_maps/<filename>
     """
 
     filename = os.path.basename(local_file_path)
@@ -171,11 +175,11 @@ def get_b2_destination_path(dataset_id, local_file_path):
 
     if ext in SUPPORTED_TILE_EXTENSIONS:
         file_role = "point_cloud_tile"
-        b2_path = f"bronze_raw_data/{dataset_id}/source_files/tiles/{filename}"
+        b2_path = f"{bronze_tiles_prefix(dataset_id)}/{filename}"
 
     elif ext in SUPPORTED_LABEL_MAP_EXTENSIONS:
         file_role = "label_mapping"
-        b2_path = f"bronze_raw_data/{dataset_id}/source_files/label_maps/{filename}"
+        b2_path = f"{bronze_label_maps_prefix(dataset_id)}/{filename}"
 
     else:
         raise ValueError(
@@ -207,17 +211,42 @@ def _stage_host_file(src_path, suffix):
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir="/tmp")
     tmp.close()
     print(f"[STAGE] {src_path} -> {tmp.name}")
-    subprocess.run(["cp", "--", src_path, tmp.name], check=True, timeout=7200)
+    result = subprocess.run(
+        ["cp", "--", src_path, tmp.name],
+        check=False,
+        timeout=7200,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        is_deadlock = "deadlock" in stderr.lower() or "resource deadlock" in stderr.lower()
+        if is_deadlock:
+            raise RuntimeError(
+                f"Docker Desktop VirtioFS resource deadlock reading '{src_path}'. "
+                f"This is a macOS Docker large-file limitation — files > ~200 MB on the "
+                f"host-mounted volume cannot be streamed reliably through VirtioFS.\n"
+                f"Fix options:\n"
+                f"  1. Use Reliable Browser Upload above — the browser reads your Mac's "
+                f"files directly and sends chunks over HTTP, bypassing VirtioFS entirely.\n"
+                f"  2. Restart Docker Desktop to clear the deadlock state, then retry "
+                f"(may still fail for files > 200 MB)."
+            )
+        raise RuntimeError(
+            f"Could not copy '{src_path}' to staging area. "
+            f"cp exit={result.returncode}"
+            + (f": {stderr}" if stderr else "")
+        )
     print(f"[STAGE] done ({os.path.getsize(tmp.name):,} bytes)")
     return tmp.name
 
 
 def upload_local_file_to_b2_standard(dataset_id, local_file_path):
     """
-    Upload one file to the standard bronze_raw_data structure.
+    Upload one file to the standard v2 bronze structure.
 
-    - .ply/.las/.laz/.pts/.xyz/.txt/.csv -> source_files/tiles/
-    - .xml/.json/.yaml/.yml             -> source_files/label_maps/
+    - .ply/.las/.laz/.pts/.xyz/.txt/.csv -> 01_raw_data/bronze_raw_data/<dataset_id>/source_files/tiles/
+    - .xml/.json/.yaml/.yml             -> 01_raw_data/bronze_raw_data/<dataset_id>/source_files/label_maps/
 
     Files from Docker host mounts (/datasets/…) are staged to /tmp first so
     that SHA-1 and the B2 SDK never read directly from the VirtioFS FUSE layer,
@@ -233,11 +262,38 @@ def upload_local_file_to_b2_standard(dataset_id, local_file_path):
     if not local_file_path:
         raise ValueError("Local file path is empty.")
 
+    _host = DATASETS_HOST_PREFIX.rstrip("/")
+    _container = DATASETS_CONTAINER_PREFIX.rstrip("/")
+    _mount_hint = (
+        f"\nIf Dash is running in Docker, mount your host dataset folder into the container "
+        f"and use the container-visible path.\n"
+        f"Example: mount {_host} to {_container}, then use {_container}/<folder>/<file>.\n"
+        f"Docker Compose volume: {_host}:{_container}:ro"
+    )
+
     if not os.path.exists(local_file_path):
-        raise FileNotFoundError(f"File not found: {local_file_path}")
+        raise FileNotFoundError(
+            f"The Dash server cannot read this path: {local_file_path}{_mount_hint}"
+        )
 
     if not os.path.isfile(local_file_path):
         raise ValueError(f"Path is not a file: {local_file_path}")
+
+    if not os.access(local_file_path, os.R_OK):
+        raise PermissionError(
+            f"The Dash server does not have read access to: {local_file_path}{_mount_hint}"
+        )
+
+    # Quick read probe before the expensive staging + SHA-1 step.
+    # Catches locked, unreadable, or deadlocked files immediately with a clean error.
+    try:
+        with open(local_file_path, "rb") as _probe:
+            _probe.read(1024)
+    except OSError as _exc:
+        raise OSError(
+            f"The Dash server cannot read '{local_file_path}': {_exc}. "
+            f"Ensure the file is not locked or corrupted.{_mount_hint}"
+        ) from _exc
 
     filename, ext, file_role, b2_path = get_b2_destination_path(
         dataset_id=dataset_id,
@@ -521,26 +577,29 @@ def upload_folder_to_b2(dataset_id, folder_path, complete_progress=True):
 
     results = []
     failed_files = 0
+    success_count = 0
     failed_file_details = []
 
     try:
         for index, local_file_path in enumerate(supported_files, start=1):
             current_file = os.path.basename(local_file_path)
 
+            print("=" * 80)
+            print(f"[FOLDER UPLOAD] File {index}/{total_files}: {current_file}")
+            print(f"  path     : {local_file_path}")
+            print(f"  size     : {os.path.getsize(local_file_path):,} bytes")
+            print(f"  readable : {os.access(local_file_path, os.R_OK)}")
+            print("=" * 80)
+
             update_upload_progress(
                 dataset_id=dataset_id,
-                uploaded_files=index - 1,
+                uploaded_files=success_count,
                 total_files=total_files,
                 current_file=current_file,
                 failed_files=failed_files,
                 status="uploading",
-                message=f"Uploading {current_file}",
+                message=f"Uploading {current_file} ({index}/{total_files})",
             )
-
-            print("=" * 80)
-            print(f"[FOLDER UPLOAD] File {index}/{total_files}")
-            print(local_file_path)
-            print("=" * 80)
 
             max_attempts = 3
             retry_delays = [5, 15]
@@ -555,15 +614,16 @@ def upload_folder_to_b2(dataset_id, folder_path, complete_progress=True):
 
                     results.append(result)
                     last_error = None
+                    success_count += 1
 
                     update_upload_progress(
                         dataset_id=dataset_id,
-                        uploaded_files=index,
+                        uploaded_files=success_count,
                         total_files=total_files,
                         current_file=current_file,
                         failed_files=failed_files,
                         status="uploading",
-                        message=f"Uploaded {current_file}",
+                        message=f"Uploaded {current_file} ({success_count}/{total_files})",
                     )
 
                     break
@@ -592,7 +652,7 @@ def upload_folder_to_b2(dataset_id, folder_path, complete_progress=True):
 
                 update_upload_progress(
                     dataset_id=dataset_id,
-                    uploaded_files=index - 1,
+                    uploaded_files=success_count,
                     total_files=total_files,
                     current_file=current_file,
                     failed_files=failed_files,
@@ -673,9 +733,9 @@ def build_upload_manifest(dataset_id, upload_results):
         "dataset_name": dataset_id,
         "uploaded_at": datetime.now().isoformat(),
         "bucket": B2_BUCKET_NAME,
-        "raw_tile_prefix": f"bronze_raw_data/{dataset_id}/source_files/tiles/",
-        "label_map_prefix": f"bronze_raw_data/{dataset_id}/source_files/label_maps/",
-        "manifest_prefix": f"bronze_raw_data/{dataset_id}/manifests/",
+        "raw_tile_prefix": f"{bronze_tiles_prefix(dataset_id)}/",
+        "label_map_prefix": f"{bronze_label_maps_prefix(dataset_id)}/",
+        "manifest_prefix": f"{bronze_manifest_prefix(dataset_id)}/",
         "files": [
             {
                 "file_name": item["filename"],
@@ -719,7 +779,7 @@ def build_checksum_manifest(dataset_id, upload_results):
 def upload_json_to_b2(dataset_id, object_name, payload):
     """
     Upload a JSON manifest to:
-        bronze_raw_data/<dataset_id>/manifests/<object_name>
+        01_raw_data/bronze_raw_data/<dataset_id>/manifests/<object_name>
     """
 
     os.makedirs(
@@ -737,7 +797,7 @@ def upload_json_to_b2(dataset_id, object_name, payload):
     with open(local_json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=4)
 
-    b2_path = f"bronze_raw_data/{dataset_id}/manifests/{object_name}"
+    b2_path = f"{bronze_manifest_prefix(dataset_id)}/{object_name}"
 
     result = upload_local_file_to_b2_path(
         local_file_path=local_json_path,
@@ -908,14 +968,14 @@ def download_b2_file_to_local(
     Supports both call styles:
 
         download_b2_file_to_local(
-            b2_file_name="bronze_raw_data/...",
+            b2_file_name="01_raw_data/bronze_raw_data/<dataset_id>/source_files/tiles/<file>",
             local_output_path="data/local_staging/..."
         )
 
     and:
 
         download_b2_file_to_local(
-            b2_key="bronze_raw_data/...",
+            b2_key="01_raw_data/bronze_raw_data/<dataset_id>/source_files/tiles/<file>",
             local_path="data/local_staging/..."
         )
 
@@ -969,10 +1029,10 @@ def download_b2_file_to_local(
 def get_b2_tiles_for_dataset(dataset_id):
     """
     Return all point cloud tiles stored in:
-        bronze_raw_data/<dataset_id>/source_files/tiles/
+        01_raw_data/bronze_raw_data/<dataset_id>/source_files/tiles/
     """
 
-    prefix = f"bronze_raw_data/{dataset_id}/source_files/tiles/"
+    prefix = f"{bronze_tiles_prefix(dataset_id)}/"
     files = list_b2_files_with_prefix(prefix)
 
     supported = []
@@ -989,10 +1049,10 @@ def get_b2_tiles_for_dataset(dataset_id):
 def get_b2_label_maps_for_dataset(dataset_id):
     """
     Return all label mapping files stored in:
-        bronze_raw_data/<dataset_id>/source_files/label_maps/
+        01_raw_data/bronze_raw_data/<dataset_id>/source_files/label_maps/
     """
 
-    prefix = f"bronze_raw_data/{dataset_id}/source_files/label_maps/"
+    prefix = f"{bronze_label_maps_prefix(dataset_id)}/"
     files = list_b2_files_with_prefix(prefix)
 
     supported = []

@@ -7,21 +7,25 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, dash_table, dcc, html
 from dash.exceptions import PreventUpdate
 
+from components.lidar_particle_background import lidar_particle_background
 from components.platform_theme import (
     empty_state,
     ops_service_health_card,
     ops_table_style,
     small_status,
 )
+from components.platform_header import platform_header
 from services.compute_nodes_service import (
     COMPUTE_HEALTH_POLL_MS,
     build_compute_target_options,
     check_compute_nodes,
     resolve_airflow_queue,
 )
+from services.dataset_selection import resolve_selected_dataset_id
 from services.metadata_service import list_registered_datasets
 from services.mlflow_service import mlflow_browser_url
 from services.preprocessing_runtime_service import build_airflow_status_snapshot
+from services.silver_gold_outputs_service import get_gold_readiness
 from services.training_service import (
     AIRFLOW_API_BASE_URL,
     AIRFLOW_TRAINING_DAG_ID,
@@ -83,6 +87,16 @@ def _dataset_options():
         for item in datasets
         if item.get("dataset_id")
     ]
+
+
+def _dataset_name_for(dataset_id):
+    dataset_id = str(dataset_id or "").strip()
+    if not dataset_id:
+        return ""
+    for item in list_registered_datasets():
+        if item.get("dataset_id") == dataset_id:
+            return item.get("dataset_name") or dataset_id
+    return dataset_id
 
 
 def _training_history_rows(limit=8):
@@ -304,56 +318,23 @@ layout = dbc.Container(
         dcc.Interval(id="training-history-refresh", interval=60000, n_intervals=0),
         dcc.Store(id="training-dag-run-store"),
         dcc.Store(id="training-airflow-status-store"),
+        dcc.Store(id="training-gold-readiness-store"),
         dcc.Interval(id="training-airflow-status-refresh", interval=10000, n_intervals=0, disabled=True),
         html.Div(id="training-toast-wrap", className="lp-toast-wrap"),
 
         # ── Topbar ─────────────────────────────────────────────────────────
-        html.Div(
-            className="de-topbar",
-            children=[
-                html.Div(
-                    className="de-brand",
-                    children=[
-                        html.Span(className="de-brand-grid"),
-                        html.Div(
-                            [
-                                html.Div("LiDAR Platform", className="de-brand-title"),
-                                html.Div(
-                                    "Training - GPU Routing - MLOps",
-                                    className="de-brand-subtitle",
-                                ),
-                            ],
-                            className="de-brand-copy",
-                        ),
-                    ],
-                ),
-                html.Div(
-                    [
-                        dcc.Link("Home", href="/", className="de-nav-link"),
-                        dcc.Link("Data Explorer", href="/data-explorer", className="de-nav-link"),
-                        dcc.Link("Preprocessing", href="/preprocessing", className="de-nav-link"),
-                        dcc.Link(
-                            "Training",
-                            href="/training",
-                            className="de-nav-link de-nav-link-active",
-                        ),
-                        dcc.Link("Postprocessing", href="/postprocessing", className="de-nav-link"),
-                        dcc.Link("Control", href="/control-panel", className="de-nav-link"),
-                    ],
-                    className="de-nav",
-                ),
-                html.Div(
-                    [html.Span(className="de-live-dot"), "GPU Routing"],
-                    className="de-live-pill",
-                ),
-            ],
+        platform_header(
+            active_path="/training",
+            brand_subtitle="Training · GPU Routing · MLOps",
+            status_label="GPU Routing",
+            visual_context="ops",
         ),
 
         # ── Hero ───────────────────────────────────────────────────────────
         html.Section(
             className="de-hero",
             children=[
-                html.Canvas(id="training-cv", **{"aria-label": "Animated training field"}),
+                lidar_particle_background("training-cv", aria_label="Animated training field"),
                 html.Div(
                     [
                         html.Div(
@@ -502,6 +483,7 @@ layout = dbc.Container(
                                     id="training-trigger-button",
                                     color="success",
                                     className="w-100 mt-3",
+                                    disabled=True,
                                 ),
                                 html.Div(id="training-trigger-result", className="mt-2"),
                             ],
@@ -545,7 +527,7 @@ layout = dbc.Container(
                                                             dbc.Label("Dataset ID"),
                                                             dbc.Input(
                                                                 id="training-dataset-id",
-                                                                placeholder="paris-lille-id-1",
+                                                                placeholder="Selected dataset ID",
                                                                 persistence=True,
                                                                 persistence_type="session",
                                                             ),
@@ -557,7 +539,7 @@ layout = dbc.Container(
                                                             dbc.Label("Dataset Name"),
                                                             dbc.Input(
                                                                 id="training-dataset-name",
-                                                                placeholder="Paris-Lille-3D",
+                                                                placeholder="Dataset name",
                                                                 persistence=True,
                                                                 persistence_type="session",
                                                             ),
@@ -578,6 +560,10 @@ layout = dbc.Container(
                                                     ),
                                                 ],
                                                 className="ops-field-grid",
+                                            ),
+                                            html.Div(
+                                                id="training-gold-readiness",
+                                                className="mt-3",
                                             ),
                                             html.Div(
                                                 [
@@ -944,6 +930,21 @@ def refresh_training_datasets(_n):
 
 
 @callback(
+    Output("training-dataset-dropdown", "value"),
+    Output("training-dataset-id", "value", allow_duplicate=True),
+    Output("training-dataset-name", "value", allow_duplicate=True),
+    Input("url", "search"),
+    Input("selected-dataset-id", "data"),
+    prevent_initial_call="initial_duplicate",
+)
+def apply_context_dataset(search, selected_dataset_id):
+    dataset_id = resolve_selected_dataset_id(search, selected_dataset_id)
+    if not dataset_id:
+        return None, "", ""
+    return dataset_id, dataset_id, _dataset_name_for(dataset_id)
+
+
+@callback(
     Output("training-dataset-id", "value"),
     Output("training-dataset-name", "value"),
     Input("training-dataset-dropdown", "value"),
@@ -952,10 +953,70 @@ def refresh_training_datasets(_n):
 def apply_selected_dataset(dataset_id):
     if not dataset_id:
         raise PreventUpdate
-    for item in list_registered_datasets():
-        if item.get("dataset_id") == dataset_id:
-            return dataset_id, item.get("dataset_name") or dataset_id
-    return dataset_id, dataset_id
+    return dataset_id, _dataset_name_for(dataset_id)
+
+
+@callback(
+    Output("training-gold-readiness-store", "data"),
+    Output("training-gold-readiness", "children"),
+    Output("training-trigger-button", "disabled"),
+    Output("training-trigger-button", "children"),
+    Input("training-dataset-id", "value"),
+    Input("training-prep-version", "value"),
+)
+def update_gold_readiness(dataset_id, prep_version):
+    dataset_id = str(dataset_id or "").strip()
+    prep_version = str(prep_version or "prep_v001").strip() or "prep_v001"
+    if not dataset_id:
+        status = {
+            "ready": False,
+            "dataset_id": "",
+            "prep_version": prep_version,
+            "message": "Please select a dataset first.",
+        }
+        return status, dbc.Alert("Please select a dataset first.", color="info", className="mb-0"), True, "Trigger Training DAG"
+
+    status = get_gold_readiness(dataset_id, prep_version)
+    if not status.get("ready"):
+        message = "No Gold model-ready data found. Run preprocessing first."
+        detail = status.get("prefix") or ""
+        return (
+            status,
+            dbc.Alert([message, html.Br(), html.Code(detail)], color="warning", className="mb-0"),
+            True,
+            "Run preprocessing first",
+        )
+
+    split_availability = status.get("split_availability") or {}
+    rows = [
+        ("Dataset ID", dataset_id),
+        ("Prep Version", status.get("prep_version") or prep_version),
+        ("Gold Blocks", status.get("gold_blocks", 0)),
+        ("Train Blocks", "Available" if split_availability.get("train") else "Not detected"),
+        ("Val Blocks", "Available" if split_availability.get("val") else "Not detected"),
+        ("Test Blocks", "Available" if split_availability.get("test") else "Not detected"),
+    ]
+    return (
+        status,
+        html.Div(
+            [
+                small_status("Gold model-ready data", "ready"),
+                html.Div(
+                    [
+                        html.Div(
+                            [html.Span(label), html.Strong(str(value))],
+                            className="preproc-trigger-row",
+                        )
+                        for label, value in rows
+                    ],
+                    className="preproc-trigger-grid",
+                ),
+            ],
+            className="preproc-trigger-card",
+        ),
+        False,
+        "Trigger Training DAG",
+    )
 
 
 @callback(
@@ -1023,6 +1084,7 @@ def refresh_training_history(_n, _latest_result, _status):
     Input("training-mlflow-experiment", "value"),
     Input("training-dvc-remote", "value"),
     Input("training-storage-flags", "value"),
+    Input("training-gold-readiness-store", "data"),
 )
 def preview_training_payload(*raw_values):
     keys = [
@@ -1040,7 +1102,18 @@ def preview_training_payload(*raw_values):
         "dvc_remote",
         "storage_flags",
     ]
-    values = dict(zip(keys, raw_values))
+    gold_status = raw_values[-1] or {}
+    values = dict(zip(keys, raw_values[:-1]))
+    if not values["dataset_id"]:
+        return (
+            empty_state("Dataset required", "Please select a dataset first."),
+            "Training command waits for a selected dataset.",
+        )
+    if not gold_status.get("ready"):
+        return (
+            empty_state("Gold data required", "No Gold model-ready data found. Run preprocessing first."),
+            f"Expected Gold prefix: {gold_status.get('prefix') or '02_preprocessing/gold_model_ready_data/<dataset_id>/<prep_version>/'}",
+        )
     dataset_id = values["dataset_id"] or "<dataset_id>"
     values["dataset_id"] = dataset_id
     values["dataset_name"] = values["dataset_name"] or dataset_id
@@ -1073,6 +1146,7 @@ def preview_training_payload(*raw_values):
     Output("training-dag-run-store", "data"),
     Output("training-airflow-status-refresh", "disabled"),
     Input("training-trigger-button", "n_clicks"),
+    State("training-gold-readiness-store", "data"),
     State("training-dataset-id", "value"),
     State("training-dataset-name", "value"),
     State("training-prep-version", "value"),
@@ -1088,7 +1162,7 @@ def preview_training_payload(*raw_values):
     State("training-storage-flags", "value"),
     prevent_initial_call=True,
 )
-def trigger_training(n_clicks, *raw_values):
+def trigger_training(n_clicks, gold_status, *raw_values):
     if not n_clicks:
         raise PreventUpdate
 
@@ -1110,7 +1184,13 @@ def trigger_training(n_clicks, *raw_values):
     values = dict(zip(keys, raw_values))
     if not values["dataset_id"]:
         return (
-            dbc.Alert("Select or enter a dataset ID before triggering training.", color="warning"),
+            dbc.Alert("Please select a dataset first.", color="warning"),
+            dash.no_update,
+            True,
+        )
+    if not (gold_status or {}).get("ready"):
+        return (
+            dbc.Alert("No Gold model-ready data found. Run preprocessing first.", color="warning"),
             dash.no_update,
             True,
         )

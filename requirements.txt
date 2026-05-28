@@ -12,3 +12,7 @@ laspy[lazrs]>=2.5.0
 plyfile>=1.0.3
 rerun-sdk>=0.31.2,<0.32.0
 pyyaml
+geopandas>=1.0.0
+shapely>=2.0.0
+pyproj>=3.6.0
+scikit-learn>=1.4.0

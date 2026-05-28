@@ -8,6 +8,7 @@ import time
 import uuid
 from datetime import datetime
 
+from services.b2_paths import bronze_tiles_prefix, bronze_label_maps_prefix
 from services.b2_service import (
     B2_BUCKET_NAME,
     SUPPORTED_LABEL_MAP_EXTENSIONS,
@@ -226,10 +227,10 @@ def create_browser_upload_session(payload):
         has_point_cloud_tile = (
             has_point_cloud_tile or classified["file_role"] == "point_cloud_tile"
         )
-        b2_path = (
-            f"bronze_raw_data/{dataset_id}/source_files/"
-            f"{classified['folder']}/{filename}"
-        )
+        if classified['folder'] == 'tiles':
+            b2_path = f"{bronze_tiles_prefix(dataset_id)}/{filename}"
+        else:
+            b2_path = f"{bronze_label_maps_prefix(dataset_id)}/{filename}"
         if b2_path in seen_targets:
             raise ValueError(
                 f"Duplicate target file name: {filename}. Rename duplicate files before upload."
@@ -402,6 +403,9 @@ def _save_b2_progress(session, message, percentage, current_file="", status="upl
     uploaded_files = sum(
         1 for item in session.get("files", []) if item.get("status") == "b2_uploaded"
     )
+    failed_files = sum(
+        1 for item in session.get("files", []) if item.get("status") == "failed"
+    )
     save_upload_progress(
         session["dataset_id"],
         {
@@ -410,7 +414,7 @@ def _save_b2_progress(session, message, percentage, current_file="", status="upl
             "stage": "b2_upload",
             "total_files": total_files,
             "uploaded_files": uploaded_files,
-            "failed_files": 0,
+            "failed_files": failed_files,
             "current_file": current_file,
             "percentage": max(0, min(float(percentage), 100)),
             "message": message,

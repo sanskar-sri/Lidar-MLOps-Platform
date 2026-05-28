@@ -50,7 +50,7 @@ services:
       DATASETS_HOST_PREFIX: "/Users/sanskarsrivastava/Desktop/Datasets"
       DATASETS_CONTAINER_PREFIX: "/datasets"
       BROWSER_UPLOAD_SESSION_DIR: "/app/data/upload_sessions"
-      BROWSER_UPLOAD_STAGING_DIR: "/app/data/browser_upload_staging"
+      BROWSER_UPLOAD_STAGING_DIR: "/tmp/browser_upload_staging"
       BROWSER_UPLOAD_CHUNK_BYTES: "${BROWSER_UPLOAD_CHUNK_BYTES:-16777216}"
       MLFLOW_INTERNAL_URL: "http://mlflow:5000"
       MLFLOW_PUBLIC_URL: "${MLFLOW_PUBLIC_URL:-http://localhost:5001}"

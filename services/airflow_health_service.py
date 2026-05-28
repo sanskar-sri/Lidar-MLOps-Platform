@@ -19,6 +19,9 @@ AIRFLOW_HEALTH_B2_DAG_ID = os.getenv("AIRFLOW_HEALTH_B2_DAG_ID", "dag_health_b2"
 AIRFLOW_HEALTH_B2_TASK_ID = os.getenv("AIRFLOW_HEALTH_B2_TASK_ID", "check_b2_health").strip()
 AIRFLOW_HEALTH_REMOTE_DAG_ID = os.getenv("AIRFLOW_HEALTH_REMOTE_DAG_ID", "dag_health_remote").strip()
 AIRFLOW_HEALTH_REMOTE_TASK_ID = os.getenv("AIRFLOW_HEALTH_REMOTE_TASK_ID", "check_remote_health").strip()
+AIRFLOW_HEALTH_ENABLE_LIVE_PROBES = (
+    os.getenv("AIRFLOW_HEALTH_ENABLE_LIVE_PROBES", "0").strip() == "1"
+)
 
 
 def _short_detail(value, limit=92):
@@ -274,6 +277,9 @@ def _b2_card():
 
 
 def get_b2_file_count():
+    if not AIRFLOW_HEALTH_ENABLE_LIVE_PROBES:
+        return None
+
     payloads = []
     try:
         latest = _latest_health_payload(AIRFLOW_HEALTH_B2_DAG_ID, AIRFLOW_HEALTH_B2_TASK_ID)
@@ -382,6 +388,40 @@ def _compute_node_cards():
 
 
 def get_backend_status_cards():
+    if not AIRFLOW_HEALTH_ENABLE_LIVE_PROBES:
+        return [
+            _status_result(
+                "B2 Storage",
+                "Checking",
+                "Live health probes are disabled; enable AIRFLOW_HEALTH_ENABLE_LIVE_PROBES=1 to query Airflow health DAGs.",
+                "checking",
+            ),
+            _status_result(
+                "Airflow",
+                "Checking",
+                "Live Airflow probe disabled for safe startup.",
+                "checking",
+            ),
+            _status_result(
+                "MLflow",
+                "Checking",
+                "Live MLflow probe disabled for safe startup.",
+                "checking",
+            ),
+            _status_result(
+                "DVC",
+                "Checking",
+                "Live DVC probe disabled for safe startup.",
+                "checking",
+            ),
+            _status_result(
+                "Airflow Runtime",
+                "Checking",
+                "Remote runtime probe disabled for safe startup.",
+                "checking",
+            ),
+        ]
+
     remote = _remote_payload()
     return [
         _b2_card(),

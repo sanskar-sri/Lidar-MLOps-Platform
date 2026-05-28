@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import dash
 from dash import Input, Output, callback, dcc, html
 
+from components.lidar_particle_background import lidar_particle_background
 from components.platform_theme import ops_service_health_card, ops_topbar
 from services.airflow_health_service import get_backend_status_cards
 from services.compute_nodes_service import COMPUTE_HEALTH_POLL_MS, check_compute_nodes
@@ -121,7 +122,7 @@ layout = html.Div(
 
         html.Div(
             [
-                html.Canvas(id="control-cv", className="ops-hero-canvas"),
+                lidar_particle_background("control-cv", class_name="ops-hero-canvas"),
                 html.Div(className="ops-hero-shade"),
                 html.Div(
                     [

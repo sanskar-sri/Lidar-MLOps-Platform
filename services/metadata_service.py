@@ -12,6 +12,7 @@ import pandas as pd
 
 from services.upload_progress import update_metadata_progress
 from services.b2_service import (
+    B2_BUCKET_NAME,
     get_b2_tiles_for_dataset,
     get_b2_label_maps_for_dataset,
     download_b2_file_to_local,
@@ -28,6 +29,7 @@ from services.pointcloud_reader import (
 )
 
 from services.parquet_service import save_analytics_parquets
+from services.b2_paths import b2_prefix, bronze_tiles_prefix, bronze_label_maps_prefix, bronze_manifest_prefix, dataset_metadata_key
 
 
 # -------------------------------------------------------------------
@@ -397,8 +399,8 @@ def generate_dataset_metadata_and_analytics(
 
     Then uploads metadata and analytics back to B2:
 
-        metadata/datasets/<dataset_id>.json
-        metadata_analytics/<dataset_id>/*.parquet
+        06_governance/metadata/datasets/<dataset_id>/metadata.json
+        06_governance/metadata_analytics/<dataset_id>/*.parquet
 
     If uploaded_files is supplied, matching B2 objects are read from the local
     upload source instead of being downloaded from B2 again.
@@ -450,7 +452,7 @@ def generate_dataset_metadata_and_analytics(
     if not b2_tiles:
         raise ValueError(
             f"No point cloud tiles found in B2 for dataset_id={dataset_id}. "
-            f"Expected prefix: bronze_raw_data/{dataset_id}/source_files/tiles/"
+            f"Expected prefix: {bronze_tiles_prefix(dataset_id)}/"
         )
 
     # -------------------------------------------------------------------
@@ -1222,12 +1224,12 @@ def generate_dataset_metadata_and_analytics(
         "status": "registered",
 
         "storage": {
-            "bucket": "Building-Identification-MLS",
-            "raw_tile_prefix": f"bronze_raw_data/{dataset_id}/source_files/tiles/",
-            "label_map_prefix": f"bronze_raw_data/{dataset_id}/source_files/label_maps/",
-            "manifest_prefix": f"bronze_raw_data/{dataset_id}/manifests/",
-            "metadata_path": f"metadata/datasets/{dataset_id}.json",
-            "analytics_path": f"metadata_analytics/{dataset_id}/",
+            "bucket": B2_BUCKET_NAME,
+            "raw_tile_prefix": f"{bronze_tiles_prefix(dataset_id)}/",
+            "label_map_prefix": f"{bronze_label_maps_prefix(dataset_id)}/",
+            "manifest_prefix": f"{bronze_manifest_prefix(dataset_id)}/",
+            "metadata_path": dataset_metadata_key(dataset_id),
+            "analytics_path": f"{b2_prefix('metadata_analytics')}/{dataset_id}/",
         },
 
         "total_files": len(file_summaries),
@@ -1436,22 +1438,22 @@ def generate_dataset_metadata_and_analytics(
     try:
         upload_local_file_to_b2_path(
             local_file_path=metadata_path,
-            b2_path=f"metadata/datasets/{dataset_id}.json",
+            b2_path=dataset_metadata_key(dataset_id),
         )
 
         local_analytics_dir = os.path.join(ANALYTICS_DIR, dataset_id)
 
         upload_local_directory_to_b2(
             local_dir=local_analytics_dir,
-            b2_prefix=f"metadata_analytics/{dataset_id}/",
+            b2_prefix=f"{b2_prefix('metadata_analytics')}/{dataset_id}/",
         )
 
         metadata_cloud_upload_status = "uploaded"
 
         print("=" * 80)
         print("[METADATA UPLOADED TO B2]")
-        print(f"B2 metadata path  : metadata/datasets/{dataset_id}.json")
-        print(f"B2 analytics path : metadata_analytics/{dataset_id}/")
+        print(f"B2 metadata path  : {dataset_metadata_key(dataset_id)}")
+        print(f"B2 analytics path : {b2_prefix('metadata_analytics')}/{dataset_id}/")
         print("=" * 80)
 
     except Exception as cloud_error:

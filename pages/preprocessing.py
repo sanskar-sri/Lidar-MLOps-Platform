@@ -1,7 +1,6 @@
 import json
 import os
 from datetime import datetime, timezone
-from urllib.parse import parse_qs
 
 import dash
 import dash_bootstrap_components as dbc
@@ -20,6 +19,8 @@ from components.platform_theme import (
     step_item,
 )
 from components.silver_layer_section import build_silver_layer_section
+from services.b2_paths import b2_prefix as _b2_prefix, bronze_tiles_prefix
+from services.dataset_selection import resolve_selected_dataset_id
 from services.compute_nodes_service import (
     COMPUTE_HEALTH_POLL_MS,
     check_compute_nodes,
@@ -140,13 +141,13 @@ def _normalize_prefix(value):
 def _standard_silver_prefix(dataset_id, prep_version):
     dataset_id = (dataset_id or "<dataset_id>").strip() or "<dataset_id>"
     prep_version = (prep_version or "prep_v001").strip() or "prep_v001"
-    return f"silver_preprocessed_data/{dataset_id}/{prep_version}"
+    return f"{_b2_prefix('silver_preprocessed_data')}/{dataset_id}/{prep_version}"
 
 
 def _standard_gold_prefix(dataset_id, prep_version):
     dataset_id = (dataset_id or "<dataset_id>").strip() or "<dataset_id>"
     prep_version = (prep_version or "prep_v001").strip() or "prep_v001"
-    return f"gold_model_ready_data/{dataset_id}/{prep_version}"
+    return f"{_b2_prefix('gold_model_ready_data')}/{dataset_id}/{prep_version}"
 
 
 def _storage_rows(storage):
@@ -183,7 +184,7 @@ def _dataset_summary_card(dataset_id):
     file_count = row.get("total_files") or metadata.get("total_files")
     total_points = row.get("total_points") or metadata.get("total_points")
     labels = row.get("labels") or metadata.get("labels")
-    source_prefix = f"bronze_raw_data/{dataset_id}/source_files/tiles/"
+    source_prefix = f"{bronze_tiles_prefix(dataset_id)}/"
     return html.Div(
         [
             _metric_pair("Dataset ID", dataset_id),
@@ -1385,42 +1386,7 @@ layout = dbc.Container(
         dcc.Interval(id="preproc-airflow-status-refresh", interval=POLL_MS, n_intervals=0, disabled=True),
 
         # ── Topbar ────────────────────────────────────────────────────────
-        html.Div(
-            className="de-topbar",
-            children=[
-                html.Div(
-                    className="de-brand",
-                    children=[
-                        html.Span(className="de-brand-grid"),
-                        html.Div(
-                            [
-                                html.Div("LiDAR Platform", className="de-brand-title"),
-                                html.Div(
-                                    "Preprocessing · Airflow · Medallion Pipeline",
-                                    className="de-brand-subtitle",
-                                ),
-                            ],
-                            className="de-brand-copy",
-                        ),
-                    ],
-                ),
-                html.Div(
-                    [
-                        dcc.Link("Home", href="/", className="de-nav-link"),
-                        dcc.Link("Data Explorer", href="/data-explorer", className="de-nav-link"),
-                        dcc.Link("Preprocessing", href="/preprocessing", className="de-nav-link de-nav-link-active"),
-                        dcc.Link("Training", href="/training", className="de-nav-link"),
-                        dcc.Link("Postprocessing", href="/postprocessing", className="de-nav-link"),
-                        dcc.Link("Control", href="/control-panel", className="de-nav-link"),
-                    ],
-                    className="de-nav",
-                ),
-                html.Div(
-                    [html.Span(className="de-live-dot"), "Pipeline Active"],
-                    className="de-live-pill",
-                ),
-            ],
-        ),
+        ops_topbar("/preprocessing", "Preprocessing · Airflow · Medallion Pipeline", "Pipeline Active"),
 
         # ── Hero ──────────────────────────────────────────────────────────
         html.Section(
@@ -1583,14 +1549,12 @@ def apply_selected_dataset(dataset_id):
 
 
 @callback(
-    Output("preproc-dataset-id", "value", allow_duplicate=True),
+    Output("preproc-dataset-dropdown", "value"),
     Input("url", "search"),
-    prevent_initial_call=True,
+    Input("selected-dataset-id", "data"),
 )
-def apply_query_dataset(search):
-    if not search:
-        raise PreventUpdate
-    dataset_id = (parse_qs(search.lstrip("?")).get("dataset_id") or [None])[0]
+def apply_context_dataset(search, selected_dataset_id):
+    dataset_id = resolve_selected_dataset_id(search, selected_dataset_id)
     if not dataset_id:
         raise PreventUpdate
     return dataset_id
@@ -1605,7 +1569,7 @@ def apply_query_dataset(search):
 def sync_silver_prefix(dataset_id, prep_version, current_prefix):
     standard = _standard_silver_prefix(dataset_id, prep_version)
     current = _normalize_prefix(current_prefix)
-    if not current or current.startswith("silver_preprocessed_data/") or "<dataset_id>" in current:
+    if not current or current.startswith("silver_preprocessed_data/") or current.startswith(_b2_prefix("silver_preprocessed_data") + "/") or "<dataset_id>" in current:
         return standard
     return dash.no_update
 

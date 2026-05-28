@@ -1,31 +1,17 @@
 import dash
 import dash_bootstrap_components as dbc
-from dash import dcc, html
+from dash import Input, Output, callback, dcc, html
+
+from components.lidar_particle_background import lidar_particle_background
+from components.platform_header import platform_header
+from services.dataset_selection import resolve_selected_dataset_id
+from services.silver_gold_outputs_service import get_segmentation_output_summary
 
 
 dash.register_page(__name__, path="/postprocessing", name="Postprocessing")
 
 
-def _ops_nav(active):
-    links = [
-        ("Home", "/"),
-        ("Data Explorer", "/data-explorer"),
-        ("Preprocessing", "/preprocessing"),
-        ("Training", "/training"),
-        ("Postprocessing", "/postprocessing"),
-        ("Control", "/control-panel"),
-    ]
-    return html.Nav(
-        [
-            dcc.Link(
-                label,
-                href=href,
-                className="ops-nav-link ops-nav-link-active" if label == active else "ops-nav-link",
-            )
-            for label, href in links
-        ],
-        className="ops-nav",
-    )
+REFRESH_INTERVAL_MS = 60_000
 
 
 def _hero_metric(label, value):
@@ -64,28 +50,20 @@ def _readiness_row(label, value, tone="info"):
 layout = html.Div(
     className="post-page ops-page",
     children=[
-        html.Header(
-            [
-                html.Div(
-                    [
-                        html.Div(className="ops-brand-mark"),
-                        html.Div(
-                            [
-                                html.Div("LiDAR Platform", className="ops-brand-title"),
-                                html.Div("Segmentation refinement and geometric QA", className="ops-brand-subtitle"),
-                            ]
-                        ),
-                    ],
-                    className="ops-brand",
-                ),
-                _ops_nav("Postprocessing"),
-                html.Div("RANSAC Planned", className="ops-live-pill"),
-            ],
-            className="ops-topbar",
+        dcc.Interval(
+            id="postprocessing-refresh",
+            interval=REFRESH_INTERVAL_MS,
+            n_intervals=0,
+        ),
+        platform_header(
+            active_path="/postprocessing",
+            brand_subtitle="Segmentation refinement and geometric QA",
+            status_label="RANSAC Planned",
+            visual_context="ops",
         ),
         html.Section(
             [
-                html.Canvas(id="postprocessing-cv", className="ops-hero-canvas"),
+                lidar_particle_background("postprocessing-cv", class_name="ops-hero-canvas"),
                 html.Div(className="ops-hero-shade"),
                 html.Div(
                     [
@@ -121,6 +99,7 @@ layout = html.Div(
                 ),
                 html.Div(
                     [
+                        html.Div(id="postprocessing-context", className="mb-3"),
                         html.Section(
                             [
                                 html.Div(
@@ -137,6 +116,7 @@ layout = html.Div(
                                             [
                                                 dbc.Label("Training Run"),
                                                 dcc.Dropdown(
+                                                    id="post-training-run-dropdown",
                                                     options=[],
                                                     placeholder="Waiting for completed training runs",
                                                     clearable=True,
@@ -242,6 +222,7 @@ layout = html.Div(
                                         _readiness_row("RANSAC parameters", "Ready", "ok"),
                                         _readiness_row("Publish target", "clustered_final_outputs"),
                                     ],
+                                    id="post-readiness-card",
                                     className="post-readiness-card",
                                 ),
                                 html.Div(
@@ -249,7 +230,10 @@ layout = html.Div(
                                         html.Div(
                                             [
                                                 html.H3("Artifact Contract"),
-                                                html.Code("b2://<bucket>/clustered_final_outputs/<dataset>/<prep_version>/<model>/<run_id>/"),
+                                                html.Code(
+                                                    "03_segmentation/segmentation_outputs/<dataset_id>/<prep_version>/<model_name>/<run_id>/",
+                                                    id="post-artifact-contract",
+                                                ),
                                             ],
                                             className="ops-review-card",
                                         ),
@@ -263,7 +247,14 @@ layout = html.Div(
                                     ],
                                     className="ops-review-grid",
                                 ),
-                                dbc.Button("Prepare RANSAC Job", color="success", size="lg", disabled=True, className="ops-primary-action"),
+                                dbc.Button(
+                                    "Prepare RANSAC Job",
+                                    id="post-prepare-button",
+                                    color="success",
+                                    size="lg",
+                                    disabled=True,
+                                    className="ops-primary-action",
+                                ),
                             ],
                             className="ops-panel ops-panel-review",
                         ),
@@ -275,3 +266,79 @@ layout = html.Div(
         ),
     ],
 )
+
+
+@callback(
+    Output("postprocessing-context", "children"),
+    Output("post-training-run-dropdown", "options"),
+    Output("post-readiness-card", "children"),
+    Output("post-artifact-contract", "children"),
+    Output("post-prepare-button", "disabled"),
+    Output("post-prepare-button", "children"),
+    Input("selected-dataset-id", "data"),
+    Input("url", "search"),
+    Input("postprocessing-refresh", "n_intervals"),
+)
+def update_postprocessing_context(selected_dataset_id, search, _ticks):
+    dataset_id = resolve_selected_dataset_id(search, selected_dataset_id)
+    if not dataset_id:
+        return (
+            dbc.Alert("Please select a dataset first.", color="info", className="mb-0"),
+            [],
+            [
+                _readiness_row("Dataset", "Missing", "warn"),
+                _readiness_row("Training output", "Pending"),
+                _readiness_row("Segmentation mask", "Pending"),
+                _readiness_row("Publish target", "clustered_final_outputs"),
+            ],
+            "03_segmentation/segmentation_outputs/<dataset_id>/<prep_version>/<model_name>/<run_id>/",
+            True,
+            "Prepare RANSAC Job",
+        )
+
+    summary = get_segmentation_output_summary(dataset_id)
+    if not summary.get("exists"):
+        detail = summary.get("message") or "Dataset selected, but no segmentation output has been generated yet."
+        if summary.get("error"):
+            detail = f"{detail} Last B2 check: {summary['error']}"
+        return (
+            dbc.Alert(detail, color="warning", className="mb-0"),
+            [],
+            [
+                _readiness_row("Dataset", dataset_id, "ok"),
+                _readiness_row("Training output", "Pending"),
+                _readiness_row("Segmentation mask", "Missing", "warn"),
+                _readiness_row("Publish target", "clustered_final_outputs"),
+            ],
+            summary.get("prefix")
+            or "03_segmentation/segmentation_outputs/<dataset_id>/<prep_version>/<model_name>/<run_id>/",
+            True,
+            "Waiting for segmentation",
+        )
+
+    rows = summary.get("rows") or []
+    options = [
+        {
+            "label": f"{row['prep_version']} / {row['model_name']} / {row['run_id']} ({row['files']} files)",
+            "value": row["prefix"],
+        }
+        for row in rows
+    ]
+    first_prefix = rows[0]["prefix"] if rows else summary.get("prefix")
+    return (
+        dbc.Alert(
+            f"Segmentation output found for dataset '{dataset_id}'.",
+            color="success",
+            className="mb-0",
+        ),
+        options,
+        [
+            _readiness_row("Dataset", dataset_id, "ok"),
+            _readiness_row("Training output", "Available", "ok"),
+            _readiness_row("Segmentation mask", f"{summary.get('file_count', 0)} files", "ok"),
+            _readiness_row("Publish target", "04_clustering/clustered_final_outputs"),
+        ],
+        first_prefix,
+        False,
+        "Prepare RANSAC Job",
+    )

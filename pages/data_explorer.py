@@ -9,6 +9,7 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback, dash_table, ALL, no_update
 import plotly.graph_objects as go
 
+from components.platform_header import platform_header
 from components.upload_panel import upload_raw_data_panel
 from components.analytics_panels import (
     kpi_section,
@@ -39,6 +40,8 @@ from services.parquet_service import (
     load_class_mapping_summary,
 )
 
+from services.b2_paths import b2_prefix as _b2_prefix, bronze_tiles_prefix, bronze_label_maps_prefix, bronze_manifest_prefix, dataset_metadata_key
+from services.dataset_selection import search_with_dataset_id
 from services.b2_service import (
     upload_large_file_to_b2,
     upload_folder_to_b2,
@@ -548,7 +551,7 @@ def build_lineage_flowchart(dataset_id, metadata=None, analytics_status=None):
     label_maps = metadata.get("label_maps", []) or []
     readiness_passes = sum(1 for item in readiness_checks if item.get("status") == "Pass")
     model_ready = sum(1 for item in model_rows if item.get("status") == "Ready")
-    source_path = metadata.get("source_path") or f"bronze_raw_data/{dataset_id}/source_files/tiles/"
+    source_path = metadata.get("source_path") or f"{bronze_tiles_prefix(dataset_id)}/"
 
     def lineage_item(label, value):
         return html.Div(
@@ -568,20 +571,20 @@ def build_lineage_flowchart(dataset_id, metadata=None, analytics_status=None):
             ),
             html.Div(
                 [
-                    html.Code(f"bronze_raw_data/{dataset_id}/"),
+                    html.Code(f"{_b2_prefix('bronze_raw_data')}/{dataset_id}/"),
                     html.Span(" -> "),
-                    html.Code(f"metadata_analytics/{dataset_id}/"),
+                    html.Code(f"{_b2_prefix('metadata_analytics')}/{dataset_id}/"),
                     html.Span(" -> "),
-                    html.Code(f"silver_preprocessed_data/{dataset_id}/"),
+                    html.Code(f"{_b2_prefix('silver_preprocessed_data')}/{dataset_id}/"),
                     html.Span(" -> "),
-                    html.Code(f"gold_model_ready_data/{dataset_id}/"),
+                    html.Code(f"{_b2_prefix('gold_model_ready_data')}/{dataset_id}/"),
                     html.Span(" -> "),
-                    html.Code(f"segmentation_outputs/{dataset_id}/"),
+                    html.Code(f"{_b2_prefix('segmentation_outputs')}/{dataset_id}/"),
                 ],
                 className="lineage-path-row",
             ),
             lineage_item("Source", source_path),
-            lineage_item("Metadata", f"data/metadata/datasets/{dataset_id}.json"),
+            lineage_item("Metadata", dataset_metadata_key(dataset_id)),
             lineage_item("Label maps", len(label_maps)),
             lineage_item("Readiness", f"{readiness_passes}/{len(readiness_checks)} checks passing"),
             lineage_item("Model compatibility", f"{model_ready}/{len(model_rows)} model outputs ready"),
@@ -605,46 +608,15 @@ layout = dbc.Container(
     fluid=True,
     className="data-explorer-page",
     children=[
-        dcc.Store(id="selected-dataset-id"),
         dcc.Store(id="upload-status-store"),
         dcc.Interval(id="data-explorer-stats-refresh", interval=60000, n_intervals=0),
         upload_dataset_modal(),
 
-        html.Div(
-            className="de-topbar",
-            children=[
-                html.Div(
-                    className="de-brand",
-                    children=[
-                        html.Span(className="de-brand-grid"),
-                        html.Div(
-                            [
-                                html.Div("LiDAR Platform", className="de-brand-title"),
-                                html.Div(
-                                    "Data Explorer - Metadata Analytics - Rerun",
-                                    className="de-brand-subtitle",
-                                ),
-                            ],
-                            className="de-brand-copy",
-                        ),
-                    ],
-                ),
-                html.Div(
-                    [
-                        dcc.Link("Home", href="/", className="de-nav-link"),
-                        dcc.Link("Data Explorer", href="/data-explorer", className="de-nav-link de-nav-link-active"),
-                        dcc.Link("Preprocessing", href="/preprocessing", className="de-nav-link"),
-                        dcc.Link("Training", href="/training", className="de-nav-link"),
-                        dcc.Link("Postprocessing", href="/postprocessing", className="de-nav-link"),
-                        dcc.Link("Control", href="/control-panel", className="de-nav-link"),
-                    ],
-                    className="de-nav",
-                ),
-                html.Div(
-                    [html.Span(className="de-live-dot"), "Analytics Ready"],
-                    className="de-live-pill",
-                ),
-            ],
+        platform_header(
+            active_path="/data-explorer",
+            brand_subtitle="Data Explorer · Metadata Analytics · Rerun",
+            status_label="Analytics Ready",
+            visual_context="ops",
         ),
 
         html.Section(
@@ -846,6 +818,24 @@ def select_dataset(n_clicks_list):
     print("=" * 80)
 
     return dataset_id
+
+
+dash.clientside_callback(
+    """
+    function(dataset_id) {
+        if (!dataset_id) return window.dash_clientside.no_update;
+        try {
+            var u = new URL(window.location.href);
+            u.searchParams.set('dataset_id', dataset_id);
+            window.history.replaceState(null, '', u.toString());
+        } catch(e) {}
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("selected-dataset-id", "data", allow_duplicate=True),
+    Input("selected-dataset-id", "data"),
+    prevent_initial_call=True,
+)
 
 
 # -------------------------------------------------------------------
@@ -1194,9 +1184,7 @@ def delete_dataset_or_tile(n_clicks, dataset_id, tile_name):
         deleted_b2_files = []
 
         if tile_name:
-            b2_tile_path = (
-                f"bronze_raw_data/{dataset_id}/source_files/tiles/{tile_name}"
-            )
+            b2_tile_path = f"{bronze_tiles_prefix(dataset_id)}/{tile_name}"
 
             deleted_file = delete_b2_file_by_name(b2_tile_path)
             deleted_b2_files.append(deleted_file)
@@ -1208,9 +1196,9 @@ def delete_dataset_or_tile(n_clicks, dataset_id, tile_name):
 
         else:
             prefixes = [
-                f"bronze_raw_data/{dataset_id}/",
-                f"metadata/datasets/{dataset_id}.json",
-                f"metadata_analytics/{dataset_id}/",
+                f"{_b2_prefix('bronze_raw_data')}/{dataset_id}/",
+                f"{_b2_prefix('metadata')}/datasets/{dataset_id}/",
+                f"{_b2_prefix('metadata_analytics')}/{dataset_id}/",
             ]
 
             for prefix in prefixes:
@@ -1761,7 +1749,7 @@ def populate_rerun_tile_selector(dataset_id):
             continue
 
         if not b2_path:
-            b2_path = f"bronze_raw_data/{dataset_id}/source_files/tiles/{filename}"
+            b2_path = f"{bronze_tiles_prefix(dataset_id)}/{filename}"
 
         options.append(
             {

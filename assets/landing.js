@@ -5,19 +5,48 @@
  */
 
 (function () {
-    const CANVAS_IDS = ['lp-cv', 'data-explorer-cv', 'preprocessing-cv', 'training-cv', 'control-cv', 'postprocessing-cv'];
+    const CANVAS_IDS = [
+        'lp-cv',
+        'data-explorer-cv',
+        'preprocessing-cv',
+        'training-cv',
+        'control-cv',
+        'postprocessing-cv',
+        'readiness-cv',
+        'silver-gold-cv',
+        'benchmark-cv',
+        'inference-cv',
+        'exports-cv',
+        'gis-exports-cv',
+        'risk-cv',
+        'monitoring-cv',
+        'lineage-cv',
+        'api-cv'
+    ];
+
+    function getParticleCanvases() {
+        const canvases = Array.from(document.querySelectorAll('.lidar-particle-canvas'));
+        CANVAS_IDS.forEach(function (id) {
+            const canvas = document.getElementById(id);
+            if (canvas) {
+                canvas.classList.add('lidar-particle-canvas');
+                if (canvases.indexOf(canvas) === -1) canvases.push(canvas);
+            }
+        });
+        return canvases;
+    }
 
     function initLandingCanvas() {
         let started = false;
-        CANVAS_IDS.forEach(function (id) {
-            const canvas = document.getElementById(id);
+        getParticleCanvases().forEach(function (canvas) {
             if (canvas && initParticleField(canvas)) started = true;
         });
         return started;
     }
 
     function initParticleField(cv) {
-        if (cv.dataset.lpStarted === '1') return true;
+        if (cv.dataset.lidarParticlesInitialized === '1') return true;
+        cv.dataset.lidarParticlesInitialized = '1';
         cv.dataset.lpStarted = '1';
         if (typeof cv.getContext !== 'function') {
             cv.classList.add('lp-cv-fallback');
@@ -34,6 +63,8 @@
         let mouseY = -9999;
         let scanStartedAt = performance.now();
         let raf = null;
+        const prefersReducedMotion = window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
         function resize() {
             const w = parent ? parent.clientWidth : cv.offsetWidth;
@@ -51,10 +82,13 @@
 
         function makeParticles() {
             particles.length = 0;
-            const count = Math.max(320, Math.floor(width * 0.44));
+            const count = prefersReducedMotion
+                ? Math.max(120, Math.floor(width * 0.16))
+                : Math.max(320, Math.floor(width * 0.44));
             for (let i = 0; i < count; i += 1) {
                 const layer = Math.floor(Math.random() * 3);
-                const speed = layer === 0 ? 0.18 : layer === 1 ? 0.48 : 0.95;
+                const speedBase = layer === 0 ? 0.18 : layer === 1 ? 0.48 : 0.95;
+                const speed = prefersReducedMotion ? speedBase * 0.08 : speedBase;
                 const radius = layer === 0 ? 0.55 : layer === 1 ? 1.15 : 2.05;
                 const alpha = layer === 0 ? 0.26 : layer === 1 ? 0.58 : 0.95;
                 particles.push({
@@ -140,7 +174,8 @@
         function makePointCloud() {
             cloudPoints.length = 0;
             const rng = seededRandom(260516);
-            const density = width < 760 ? 0.62 : 1;
+            const densityBase = width < 760 ? 0.62 : 1;
+            const density = prefersReducedMotion ? densityBase * 0.42 : densityBase;
 
             addBuildingPoints(rng, -0.62, -0.08, 0.34, 0.42, 0.78, Math.floor(180 * density), 196);
             addBuildingPoints(rng, -0.14, 0.18, 0.42, 0.36, 1.12, Math.floor(240 * density), 205);
@@ -323,6 +358,20 @@
             raf = requestAnimationFrame(animate);
         }
 
+        function renderReducedMotionFrame() {
+            const now = performance.now();
+            const scanX = width * 0.5;
+            ctx.clearRect(0, 0, width, height);
+            drawGrid();
+            for (const particle of particles) {
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'hsla(' + particle.hue + ',78%,65%,' + particle.alpha + ')';
+                ctx.fill();
+            }
+            drawPointCloud(now, scanX);
+        }
+
         function pointerMove(event) {
             const rect = cv.getBoundingClientRect();
             mouseX = event.clientX - rect.left;
@@ -346,9 +395,14 @@
                 resize();
                 makeParticles();
                 makePointCloud();
+                if (prefersReducedMotion) renderReducedMotionFrame();
             });
             cv.addEventListener('mousemove', pointerMove);
             cv.addEventListener('mouseleave', pointerLeave);
+            if (prefersReducedMotion) {
+                renderReducedMotionFrame();
+                return;
+            }
             animate();
         }
 

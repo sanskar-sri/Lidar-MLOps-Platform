@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from services.b2_service import B2_BUCKET_NAME
 from services.metadata_service import load_dataset_metadata
 from services.mlflow_service import DEFAULT_MLFLOW_TRACKING_URI
+from services.b2_paths import b2_prefix
 
 
 load_dotenv()
@@ -91,15 +92,15 @@ def build_storage_contract(dataset_id, prep_version, bucket_name=None, run_id=No
 
     return {
         "bucket": bucket,
-        "airflow_raw_listing_prefix": f"b2://{bucket}/bronze_raw_data/",
-        "raw_tiles": f"b2://{bucket}/bronze_raw_data/{dataset_id}/source_files/tiles/",
-        "label_maps": f"b2://{bucket}/bronze_raw_data/{dataset_id}/source_files/label_maps/",
-        "registry_metadata": f"b2://{bucket}/metadata/datasets/{dataset_id}.json",
-        "analytics": f"b2://{bucket}/metadata_analytics/{dataset_id}/",
-        "silver_output": f"b2://{bucket}/silver_preprocessed_data/{dataset_id}/{prep_version}/",
-        "gold_output": f"b2://{bucket}/gold_model_ready_data/{dataset_id}/{prep_version}/",
-        "preprocessing_logs": f"b2://{bucket}/logs/{dataset_id}/{run_id}/",
-        "preprocessing_metadata": f"b2://{bucket}/metadata/datasets/{dataset_id}/metadata.json",
+        "airflow_raw_listing_prefix": f"b2://{bucket}/{b2_prefix('bronze_raw_data')}/",
+        "raw_tiles": f"b2://{bucket}/{b2_prefix('bronze_raw_data')}/{dataset_id}/source_files/tiles/",
+        "label_maps": f"b2://{bucket}/{b2_prefix('bronze_raw_data')}/{dataset_id}/source_files/label_maps/",
+        "registry_metadata": f"b2://{bucket}/{b2_prefix('metadata')}/datasets/{dataset_id}.json",
+        "analytics": f"b2://{bucket}/{b2_prefix('metadata_analytics')}/{dataset_id}/",
+        "silver_output": f"b2://{bucket}/{b2_prefix('silver_preprocessed_data')}/{dataset_id}/{prep_version}/",
+        "gold_output": f"b2://{bucket}/{b2_prefix('gold_model_ready_data')}/{dataset_id}/{prep_version}/",
+        "preprocessing_logs": f"b2://{bucket}/{b2_prefix('logs')}/{dataset_id}/{run_id}/",
+        "preprocessing_metadata": f"b2://{bucket}/{b2_prefix('metadata')}/datasets/{dataset_id}/metadata.json",
     }
 
 
@@ -279,15 +280,15 @@ def build_airflow_conf(
             "output_dir": f"/airflow/staging/{dataset_id}/preprocessed",
             "output_mode": output_mode,
             "b2_raw_bucket": storage["bucket"],
-            "b2_raw_prefix": "bronze_raw_data",
+            "b2_raw_prefix": b2_prefix("bronze_raw_data"),
             "b2_output_bucket": storage["bucket"],
-            "b2_output_prefix": f"gold_model_ready_data/{dataset_id}/{prep_version}",
+            "b2_output_prefix": f"{b2_prefix('gold_model_ready_data')}/{dataset_id}/{prep_version}",
             "b2_silver_bucket": storage["bucket"],
-            "b2_silver_prefix": f"silver_preprocessed_data/{dataset_id}/{prep_version}",
+            "b2_silver_prefix": f"{b2_prefix('silver_preprocessed_data')}/{dataset_id}/{prep_version}",
             "b2_logs_bucket": storage["bucket"],
-            "b2_logs_prefix": f"logs/{dataset_id}/{run_id}",
+            "b2_logs_prefix": f"{b2_prefix('logs')}/{dataset_id}/{run_id}",
             "b2_metadata_bucket": storage["bucket"],
-            "b2_metadata_prefix": f"metadata/datasets/{dataset_id}",
+            "b2_metadata_prefix": f"{b2_prefix('metadata')}/datasets/{dataset_id}",
             "prep_version": prep_version,
             "run_id": run_id,
             "cleanup_stage": True,

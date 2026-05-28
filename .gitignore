@@ -1,8 +1,11 @@
 .env
+.claude/worktrees/
+.DS_Store
 .venvvv/
 __pycache__/
 *.pyc
 *.pyo
+*.log
 data/mlflow/
 data/local_staging/
 data/rerun_outputs/

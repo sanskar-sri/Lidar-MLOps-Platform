@@ -2,9 +2,13 @@ import os
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc
+from dash import Input, Output, State, dcc, html
+from dash.exceptions import PreventUpdate
 from flask import jsonify, request
 
+import pathlib
+
+from services.dataset_selection import dataset_id_from_search
 from services.browser_upload_service import (
     abort_browser_upload_session,
     complete_browser_upload_file,
@@ -33,67 +37,27 @@ app.layout = dbc.Container(
     fluid=True,
     className="app-shell",
     children=[
-        dcc.Location(id="url"),
-
-        html.Div(
-            html.Div(
-                [
-                    html.H3("Building Identification on Mobile LiDAR Data"),
-                    html.P(
-                        "Data Explorer, preprocessing, training, and visualization dashboard."
-                    ),
-                ],
-                className="app-header-content",
-            ),
-            className="app-header",
-        ),
-
-        html.Div(
-            dbc.Nav(
-                [
-                    dbc.NavLink(
-                        "Home",
-                        href="/",
-                        active="exact",
-                    ),
-                    dbc.NavLink(
-                        "Data Explorer",
-                        href="/data-explorer",
-                        active="exact",
-                    ),
-                    dbc.NavLink(
-                        "Control Panel",
-                        href="/control-panel",
-                        active="exact",
-                    ),
-                    dbc.NavLink(
-                        "Preprocessing",
-                        href="/preprocessing",
-                        active="exact",
-                    ),
-                    dbc.NavLink(
-                        "Training",
-                        href="/training",
-                        active="exact",
-                    ),
-                    dbc.NavLink(
-                        "Postprocessing",
-                        href="/postprocessing",
-                        active="exact",
-                    ),
-                ],
-                pills=True,
-                className="top-nav",
-            ),
-            className="app-nav-strip",
-        ),
-
+        dcc.Location(id="url", refresh=False),
+        dcc.Store(id="selected-dataset-id", storage_type="session"),
         html.Main(
             dash.page_container,
             className="page-frame",
         ),
     ],
 )
+
+
+@app.callback(
+    Output("selected-dataset-id", "data", allow_duplicate=True),
+    Input("url", "search"),
+    State("selected-dataset-id", "data"),
+    prevent_initial_call="initial_duplicate",
+)
+def sync_selected_dataset_from_url(search, current_dataset_id):
+    dataset_id = dataset_id_from_search(search)
+    if not dataset_id or dataset_id == str(current_dataset_id or "").strip():
+        raise PreventUpdate
+    return dataset_id
 
 
 def _json_payload():
@@ -158,6 +122,29 @@ def api_abort_browser_upload_session():
         return jsonify({"ok": True, "session": session})
     except Exception as exc:
         return _json_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# Serve .rrd files so friends can open them in the Rerun web viewer at
+# https://app.rerun.io/?url=<tunnel-url>/api/rerun-files/<filename>
+# ---------------------------------------------------------------------------
+_RERUN_OUTPUT_DIR = pathlib.Path(__file__).resolve().parent / "data" / "rerun_outputs"
+
+@app.server.route("/api/rerun-files/<path:filename>", methods=["GET"])
+def serve_rrd_file(filename):
+    import re
+    from flask import send_from_directory, abort
+    # Only allow .rrd files, no path traversal
+    if not re.fullmatch(r"[\w\-\.]+\.rrd", filename):
+        abort(400)
+    if not (_RERUN_OUTPUT_DIR / filename).exists():
+        abort(404)
+    return send_from_directory(
+        str(_RERUN_OUTPUT_DIR),
+        filename,
+        mimetype="application/octet-stream",
+        as_attachment=False,
+    )
 
 
 if __name__ == "__main__":
