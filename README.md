@@ -53,6 +53,12 @@ flowchart LR
     I --> J["Risk & Exposure\nflood scoring · building inventory · GIS export"]
 ```
 
+
+
+
+
+<img width="1710" height="1107" alt="Screenshot 2026-05-28 at 2 38 01 PM" src="https://github.com/user-attachments/assets/04b8d8b7-33b0-4d89-bef4-807657ae8840" />
+
 ---
 
 ## Data Lake Layout
